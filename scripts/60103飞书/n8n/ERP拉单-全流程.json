@@ -1,0 +1,258 @@
+{
+  "name": "60103 ERP拉单 → 逐步匹配 → 出表",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "aa000000-0000-4000-8000-000000000001",
+      "name": "手动触发",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-880, 300],
+      "notes": "定时跑把这里换成 Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "1", "name": "erp_url", "value": "https://erp.example.com/api/orders", "type": "string"},
+            {"id": "2", "name": "erp_token", "value": "Bearer xxxxxxxx", "type": "string"},
+            {"id": "3", "name": "app_token", "value": "bascnXXXXXXXXXXXX", "type": "string"},
+            {"id": "4", "name": "tbl_pending", "value": "tbl_待补配置", "type": "string"},
+            {"id": "5", "name": "chat_id", "value": "oc_xxxxxxxx", "type": "string"},
+            {"id": "6", "name": "data_dir", "value": "/data/data/workflow003/60103飞书/data", "type": "string"},
+            {"id": "7", "name": "orders_dir", "value": "/data/data/workflow003/input", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa000000-0000-4000-8000-000000000002",
+      "name": "配置",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-660, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.erp_url }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [
+          {"name": "Authorization", "value": "={{ $json.erp_token }}"},
+          {"name": "Accept", "value": "application/json"}
+        ]},
+        "options": {"timeout": 60000}
+      },
+      "id": "aa000000-0000-4000-8000-000000000003",
+      "name": "① 拉 ERP 订单",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-420, 300],
+      "notes": "ERP 的返回结构可能不同，字段映射改在下一个 Code 节点"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== 1. 取出 ERP 返回的订单数组（兼容几种常见结构）=====\nlet raw = $json;\nif (raw.data !== undefined) raw = raw.data;\nif (raw.rows !== undefined) raw = raw.rows;\nif (raw.orders !== undefined) raw = raw.orders;\nif (raw.items !== undefined) raw = raw.items;\nif (raw.result !== undefined && Array.isArray(raw.result)) raw = raw.result;\nif (!Array.isArray(raw)) raw = [raw];\n\n// ===== 2. ERP 字段名 → 我们内部字段名（按你 ERP 实际字段改这里）=====\nconst MAP = {\n  '交易编号':   ['交易编号', 'trade_no', 'tradeNo', 'order_no_series'],\n  '订单编号':   ['订单编号', 'order_no', 'orderNo', 'shopify_order_no'],\n  'SKU':       ['SKU', 'sku', 'sku_code', 'item_sku'],\n  '商品数量':   ['商品数量', 'qty', 'quantity', 'num'],\n  '国家中文':   ['国家中文', 'country', 'country_cn', 'country_name'],\n  '物流公司':   ['物流公司', 'logistics_company', 'carrier'],\n  '物流渠道':   ['物流渠道', 'logistics_channel', 'channel', 'shipping_method'],\n  '内部单号':   ['内部单号', 'inner_no', 'tracking_no', 'tracking_number'],\n  '邮政编码':   ['邮政编码', 'postcode', 'zip', 'zip_code'],\n  '原始图片':   ['原始图片', 'image', 'image_url', 'picture']\n};\n\nconst pick = (row, names) => {\n  for (const n of names) {\n    if (row[n] !== undefined && row[n] !== null && String(row[n]).trim() !== '') return row[n];\n  }\n  return '';\n};\n\nconst rows = raw.map(r => {\n  const o = {};\n  for (const [target, names] of Object.entries(MAP)) o[target] = pick(r, names);\n  return o;\n});\n\n// ===== 3. 基本校验：没有 SKU / 没有交易编号 直接报错 =====\nconst badSku = rows.filter(r => !String(r['SKU']).trim()).length;\nconst badTxn = rows.filter(r => !String(r['交易编号']).trim()).length;\nif (!rows.length) throw new Error('ERP 返回 0 条订单');\nif (badSku) throw new Error(`有 ${badSku} 行没有 SKU，检查字段映射`);\nif (badTxn) throw new Error(`有 ${badTxn} 行没有交易编号，检查字段映射`);\n\n// ===== 4. 落成一个 JSON 文件 =====\nconst ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);\nconst fileName = `${$('配置').item.json.orders_dir}/erp_orders_${ts}.json`;\n\nreturn [{\n  json: {\n    rows: rows.length,\n    orders: new Set(rows.map(r => r['交易编号'])).size,\n    fileName: fileName,\n    sample: rows[0]\n  }\n}];"
+      },
+      "id": "aa000000-0000-4000-8000-000000000004",
+      "name": "② 字段映射+校验",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-180, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 把上一步规范化后的 rows 再取一次（这里重新做一遍，避免跨节点传大对象）\nlet raw = $('① 拉 ERP 订单').first().json;\nif (raw.data !== undefined) raw = raw.data;\nif (raw.rows !== undefined) raw = raw.rows;\nif (raw.orders !== undefined) raw = raw.orders;\nif (raw.items !== undefined) raw = raw.items;\nif (raw.result !== undefined && Array.isArray(raw.result)) raw = raw.result;\nif (!Array.isArray(raw)) raw = [raw];\n\nconst MAP = {\n  '交易编号':   ['交易编号', 'trade_no', 'tradeNo', 'order_no_series'],\n  '订单编号':   ['订单编号', 'order_no', 'orderNo', 'shopify_order_no'],\n  'SKU':       ['SKU', 'sku', 'sku_code', 'item_sku'],\n  '商品数量':   ['商品数量', 'qty', 'quantity', 'num'],\n  '国家中文':   ['国家中文', 'country', 'country_cn', 'country_name'],\n  '物流公司':   ['物流公司', 'logistics_company', 'carrier'],\n  '物流渠道':   ['物流渠道', 'logistics_channel', 'channel', 'shipping_method'],\n  '内部单号':   ['内部单号', 'inner_no', 'tracking_no', 'tracking_number'],\n  '邮政编码':   ['邮政编码', 'postcode', 'zip', 'zip_code'],\n  '原始图片':   ['原始图片', 'image', 'image_url', 'picture']\n};\nconst pick = (row, names) => {\n  for (const n of names) {\n    if (row[n] !== undefined && row[n] !== null && String(row[n]).trim() !== '') return String(row[n]);\n  }\n  return '';\n};\nconst rows = raw.map(r => {\n  const o = {};\n  for (const [t, names] of Object.entries(MAP)) o[t] = pick(r, names);\n  return o;\n});\n\n// 存成二进制，交给 Read/Write Files 落盘\nreturn [{\n  json: { fileName: $('② 字段映射+校验').first().json.fileName, rows: rows.length },\n  binary: {\n    data: {\n      data: Buffer.from(JSON.stringify(rows), 'utf8').toString('base64'),\n      mimeType: 'application/json',\n      fileName: $('② 字段映射+校验').first().json.fileName\n    }\n  }\n}];"
+      },
+      "id": "aa000000-0000-4000-8000-000000000005",
+      "name": "③ 生成订单 JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 300]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.fileName }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "aa000000-0000-4000-8000-000000000006",
+      "name": "④ 写订单文件",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ script: '60103飞书/step_match.py', args: [\"--orders-json\", $('② 字段映射+校验').first().json.fileName, \"--data-dir\", $('配置').item.json.data_dir], timeout: 600 }) }}",
+        "options": {"timeout": 620000}
+      },
+      "id": "aa000000-0000-4000-8000-000000000007",
+      "name": "⑤ 逐步匹配",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [540, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\nconst out = (r.stdout || '').trim();\nconst err = (r.stderr || '').trim();\nif (r.code !== 0) throw new Error('匹配失败：' + err.split('\\n').slice(-6).join(' | '));\n\nconst line = out.split('\\n').find(l => l.startsWith('RESULT '));\nif (!line) throw new Error('没有 RESULT 输出：' + out.slice(-400));\nconst res = JSON.parse(line.slice(7));\n\nconst missing = [...(res.missing_sku || []), ...(res.missing_rate || [])];\nreturn [{\n  json: {\n    ok: res.ok,\n    source: res.source,\n    orders: res.orders,\n    rows: res.rows,\n    steps: res.steps,\n    totalMissing: missing.length,\n    missing,\n    orderFile: res.order\n  }\n}];"
+      },
+      "id": "aa000000-0000-4000-8000-000000000008",
+      "name": "⑥ 解析缺失",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {"__rl": true, "mode": "id", "value": "={{ $('配置').item.json.app_token }}"},
+        "table_id": {"__rl": true, "mode": "id", "value": "={{ $('配置').item.json.tbl_pending }}"},
+        "whether_paging": false,
+        "body": "{\"field_names\":[\"标识\"]}",
+        "options": {}
+      },
+      "id": "aa000000-0000-4000-8000-000000000009",
+      "name": "⑦ 读待补表已有",
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [1020, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const existing = new Set();\ntry {\n  const it = $('⑦ 读待补表已有').first().json;\n  for (const rec of (it.items || [])) {\n    const f = rec.fields || {};\n    let key = f['标识'];\n    if (Array.isArray(key)) key = key[0]?.text ?? key[0];\n    if (key) existing.add(String(key).trim());\n  }\n} catch (e) {}\n\nconst p = $('⑥ 解析缺失').first().json;\nconst todo = (p.missing || []).filter(m => !existing.has(String(m['标识']).trim()));\n\n// 提醒文案：前 5 条\ntext = `【60103 配置待补】${p.orders} 单里有 ${p.totalMissing} 项匹配不到：\\n`\n  + (p.missing || []).slice(0, 5).map(m => `· ${m['类型']}｜${m['标识']}｜${m['说明']}`).join('\\n')\n  + ((p.missing || []).length > 5 ? `\\n… 共 ${p.missing.length} 项，详见「待补配置」表` : '');\n\nreturn [{\n  json: {\n    totalMissing: p.totalMissing,\n    newCount: todo.length,\n    skipped: (p.missing || []).length - todo.length,\n    records: todo.map(m => ({\n      fields: {\n        '类型': m['类型'],\n        '标识': m['标识'],\n        '建议前缀': m['建议前缀'] || '',\n        '订单数': m['订单数'] ?? 0,\n        '行数': m['行数'] ?? 0,\n        '样例交易编号': m['样例交易编号'] || '',\n        'SKU样例': m['SKU样例'] || '',\n        '说明': m['说明'] || '',\n        '状态': '待处理'\n      }\n    })),\n    text: text,\n    orders: p.orders,\n    orderFile: p.orderFile,\n    steps: p.steps\n  }\n}];"
+      },
+      "id": "aa000000-0000-4000-8000-00000000000a",
+      "name": "⑧ 过滤+准备提醒",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1260, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
+          "conditions": [
+            {"id": "c1", "leftValue": "={{ $json.totalMissing }}", "rightValue": 0,
+             "operator": {"type": "number", "operation": "gt"}}
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aa000000-0000-4000-8000-00000000000b",
+      "name": "⑨ 有缺失？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "batchCreateRecords",
+        "app_token": {"__rl": true, "mode": "id", "value": "={{ $('配置').item.json.app_token }}"},
+        "table_id": {"__rl": true, "mode": "id", "value": "={{ $('配置').item.json.tbl_pending }}"},
+        "body": "={{ JSON.stringify({ records: $('⑧ 过滤+准备提醒').first().json.records }) }}",
+        "options": {}
+      },
+      "id": "aa000000-0000-4000-8000-00000000000c",
+      "name": "⑩ 写待补表",
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [1740, 180]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "receive_id_type": "chat_id",
+        "receive_id": {"__rl": true, "mode": "id", "value": "={{ $('配置').item.json.chat_id }}"},
+        "msg_type": "text",
+        "content": "={{ { text: $('⑧ 过滤+准备提醒').first().json.text } }}",
+        "options": {}
+      },
+      "id": "aa000000-0000-4000-8000-00000000000d",
+      "name": "⑪ 群里提醒业务",
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [1980, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('⑧ 过滤+准备提醒').first().json;\nreturn [{\n  json: {\n    ok: true,\n    result: '缺配置，已提醒业务',\n    orders: p.orders,\n    totalMissing: p.totalMissing,\n    newWritten: p.newCount,\n    skipped: p.skipped,\n    steps: p.steps,\n    next: '业务补完商品配置/运价表后重新执行本流程'\n  }\n}];"
+      },
+      "id": "aa000000-0000-4000-8000-00000000000e",
+      "name": "⑫ 结束（待业务补）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ script: '60103飞书/generate.py', args: [\"--orders-json\", $('⑥ 解析缺失').first().json.orderFile, \"--data-dir\", $('配置').item.json.data_dir], timeout: 900 }) }}",
+        "options": {"timeout": 920000}
+      },
+      "id": "aa000000-0000-4000-8000-00000000000f",
+      "name": "⑩ 生成计算表",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\nconst out = (r.stdout || '').trim();\nconst err = (r.stderr || '').trim();\nif (r.code !== 0) throw new Error('生成计算表失败：' + err.split('\\n').slice(-6).join(' | '));\n\nconst line = out.split('\\n').find(l => l.startsWith('RESULT '));\nconst res = line ? JSON.parse(line.slice(7)) : {};\nreturn [{\n  json: {\n    ok: Boolean(res.ok),\n    result: '已生成计算表',\n    orders: res.orders,\n    rows: res.rows,\n    issues: res.issues,\n    bill_total: res.bill_total,\n    out: res.out\n  }\n}];"
+      },
+      "id": "aa000000-0000-4000-8000-000000000010",
+      "name": "⑪ 解析结果",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 420]
+    },
+    {
+      "parameters": {
+        "content": "## ERP 拉单 → 逐步匹配 → 出表\n\n```\n手动触发 → 配置 → ① 拉 ERP(HTTP) → ② 字段映射+校验 → ③ 生成订单 JSON\n  → ④ 写订单文件 → ⑤ 逐步匹配(runner) → ⑥ 解析缺失\n  → ⑦ 读待补表已有 → ⑧ 过滤+准备提醒 → ⑨ 有缺失？\n       ├─ 有 → ⑩ 写待补表 → ⑪ 群里提醒 → ⑫ 结束（等业务补）\n       └─ 无 → ⑩ 生成计算表 → ⑪ 解析结果\n```\n\n### 要填的 7 个值（配置节点）\n- erp_url / erp_token：ERP 订单接口\n- app_token：多维表格 bascn...\n- tbl_pending：待补配置表 tbl...\n- chat_id：业务群 oc_...（群里 @机器人 或用 open_chat_id）\n- data_dir / orders_dir：容器内路径\n\n### ERP 字段不一致怎么改\n只改「②字段映射+校验」里的 MAP：左边是我们内部字段，右边是 ERP 可能用的字段名，按顺序取值。\n\n### 为什么缺失就不出表\n配置不全算出来的账单是错的，所以「有缺失」分支只提醒、不出表；业务补完重跑即可。\n\n### 定时\n把「手动触发」换成 Schedule Trigger（比如每天 9 点）。",
+        "height": 560,
+        "width": 620,
+        "color": 4
+      },
+      "id": "aa000000-0000-4000-8000-000000000011",
+      "name": "说明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-900, 620]
+    }
+  ],
+  "connections": {
+    "手动触发": {"main": [[{"node": "配置", "type": "main", "index": 0}]]},
+    "配置": {"main": [[{"node": "① 拉 ERP 订单", "type": "main", "index": 0}]]},
+    "① 拉 ERP 订单": {"main": [[{"node": "② 字段映射+校验", "type": "main", "index": 0}]]},
+    "② 字段映射+校验": {"main": [[{"node": "③ 生成订单 JSON", "type": "main", "index": 0}]]},
+    "③ 生成订单 JSON": {"main": [[{"node": "④ 写订单文件", "type": "main", "index": 0}]]},
+    "④ 写订单文件": {"main": [[{"node": "⑤ 逐步匹配", "type": "main", "index": 0}]]},
+    "⑤ 逐步匹配": {"main": [[{"node": "⑥ 解析缺失", "type": "main", "index": 0}]]},
+    "⑥ 解析缺失": {"main": [[{"node": "⑦ 读待补表已有", "type": "main", "index": 0}]]},
+    "⑦ 读待补表已有": {"main": [[{"node": "⑧ 过滤+准备提醒", "type": "main", "index": 0}]]},
+    "⑧ 过滤+准备提醒": {"main": [[{"node": "⑨ 有缺失？", "type": "main", "index": 0}]]},
+    "⑨ 有缺失？": {"main": [
+      [{"node": "⑩ 写待补表", "type": "main", "index": 0}],
+      [{"node": "⑩ 生成计算表", "type": "main", "index": 0}]
+    ]},
+    "⑩ 写待补表": {"main": [[{"node": "⑪ 群里提醒业务", "type": "main", "index": 0}]]},
+    "⑪ 群里提醒业务": {"main": [[{"node": "⑫ 结束（待业务补）", "type": "main", "index": 0}]]},
+    "⑩ 生成计算表": {"main": [[{"node": "⑪ 解析结果", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "pinData": {},
+  "versionId": "1",
+  "meta": {"instanceId": "60103-erp-full"},
+  "tags": []
+}

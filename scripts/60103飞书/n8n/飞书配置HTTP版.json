@@ -1,0 +1,191 @@
+{
+  "name": "60103 飞书配置（HTTP 版）",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "name": "手动触发",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-460, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "1", "name": "app_id", "value": "cli_xxxxxxxxxxxxxxxx", "type": "string"},
+            {"id": "2", "name": "app_secret", "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "type": "string"},
+            {"id": "3", "name": "app_token", "value": "bascnXXXXXXXXXXXX", "type": "string"},
+            {"id": "4", "name": "tbl_products", "value": "tbl_商品配置", "type": "string"},
+            {"id": "5", "name": "tbl_rates", "value": "tbl_运价表", "type": "string"},
+            {"id": "6", "name": "tbl_au", "value": "tbl_澳洲分区", "type": "string"},
+            {"id": "7", "name": "tbl_params", "value": "tbl_全局参数", "type": "string"},
+            {"id": "8", "name": "tbl_rules", "value": "tbl_国家规则", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "配置",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ app_id: $('配置').item.json.app_id, app_secret: $('配置').item.json.app_secret }) }}",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000003",
+      "name": "取token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-20, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://open.feishu.cn/open-apis/bitable/v1/apps/{{ $('配置').item.json.app_token }}/tables/{{ $('配置').item.json.tbl_products }}/records",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [{"name": "page_size", "value": "500"}]},
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $('取token').item.json.tenant_access_token }}"}]},
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000004",
+      "name": "HTTP 商品配置",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 120]
+    },
+    {
+      "parameters": {
+        "url": "=https://open.feishu.cn/open-apis/bitable/v1/apps/{{ $('配置').item.json.app_token }}/tables/{{ $('配置').item.json.tbl_rates }}/records",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [{"name": "page_size", "value": "500"}]},
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $('取token').item.json.tenant_access_token }}"}]},
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000005",
+      "name": "HTTP 运价表",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 240]
+    },
+    {
+      "parameters": {
+        "url": "=https://open.feishu.cn/open-apis/bitable/v1/apps/{{ $('配置').item.json.app_token }}/tables/{{ $('配置').item.json.tbl_params }}/records",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [{"name": "page_size", "value": "500"}]},
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $('取token').item.json.tenant_access_token }}"}]},
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000006",
+      "name": "HTTP 全局参数",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 360]
+    },
+    {
+      "parameters": {
+        "url": "=https://open.feishu.cn/open-apis/bitable/v1/apps/{{ $('配置').item.json.app_token }}/tables/{{ $('配置').item.json.tbl_rules }}/records",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [{"name": "page_size", "value": "500"}]},
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $('取token').item.json.tenant_access_token }}"}]},
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000007",
+      "name": "HTTP 国家规则",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 480]
+    },
+    {
+      "parameters": {
+        "url": "=https://open.feishu.cn/open-apis/bitable/v1/apps/{{ $('配置').item.json.app_token }}/tables/{{ $('配置').item.json.tbl_au }}/records",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [{"name": "page_size", "value": "500"}]},
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $('取token').item.json.tenant_access_token }}"}]},
+        "options": {
+          "pagination": {
+            "paginationMode": "updateAParameterInEachRequest",
+            "parameters": {
+              "parameters": [
+                {"type": "query", "name": "page_token", "value": "={{ $response.body.data.page_token }}"}
+              ]
+            },
+            "paginationCompleteWhen": "other",
+            "completeExpression": "={{ !$response.body.data.has_more }}"
+          }
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000008",
+      "name": "HTTP 澳洲分区（分页）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 600],
+      "notes": "9091 行，500/页共 19 页；靠 Pagination 自动翻页"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============ 1. 取五个节点返回的原始记录 ============\nfunction itemsOf(nodeName) {\n  try {\n    return $(nodeName).all().flatMap(i => i.json.items || []);\n  } catch (e) {\n    return null;\n  }\n}\n\nconst raw = {\n  '商品配置': itemsOf('HTTP 商品配置'),\n  '运价表':   itemsOf('HTTP 运价表'),\n  '全局参数': itemsOf('HTTP 全局参数'),\n  '国家规则': itemsOf('HTTP 国家规则'),\n  '澳洲分区': itemsOf('HTTP 澳洲分区（分页）')\n};\n\n// ============ 2. 飞书字段展平 ============\nfunction core(v) {\n  if (v === null || v === undefined) return null;\n  if (typeof v === 'number' || typeof v === 'boolean') return v;\n  if (typeof v === 'string') return v.trim() || null;\n  if (Array.isArray(v)) {\n    const a = v.map(core).filter(x => x !== null);\n    return a.length === 1 ? a[0] : a;\n  }\n  if (typeof v === 'object') {\n    for (const k of ['text', 'name', 'value', 'link', 'url']) {\n      if (v[k] !== undefined) return core(v[k]);\n    }\n    if (v.values !== undefined) return core(v.values);\n  }\n  return String(v);\n}\n\nfunction flat(fields) {\n  const out = {};\n  for (const [k, v] of Object.entries(fields || {})) {\n    const key = String(k).trim();\n    let val = core(v);\n    if (typeof val === 'number' && val > 1e11 && /(日期|时间)$/.test(key)) {\n      val = new Date(val).toISOString().slice(0, 10);\n    }\n    out[key] = val;\n  }\n  return out;\n}\n\nconst data = {};\nfor (const [name, items] of Object.entries(raw)) {\n  data[name] = (items || []).map(it => flat(it.fields));\n}\n\n// ============ 3. 体检 ============\nconst REQUIRED = {\n  '商品配置': ['SKU前缀', '采购价', '国内运费', '重量'],\n  '运价表':   ['国家', '下界', '上界', '公斤价', '挂号费'],\n  '澳洲分区': ['邮编', '分区'],\n  '全局参数': ['参数键', '参数值'],\n  '国家规则': ['国家', '是否欧盟']\n};\nconst problems = [];\nfor (const [t, cols] of Object.entries(REQUIRED)) {\n  const rows = data[t] || [];\n  if (!rows.length) { problems.push(`${t}: 0 条记录（表名/协作者/权限？）`); continue; }\n  const keys = Object.keys(rows[0]);\n  const miss = cols.filter(c => !keys.includes(c));\n  if (miss.length) problems.push(`${t}: 缺字段 ${JSON.stringify(miss)}；实际 ${JSON.stringify(keys)}`);\n}\n\nconst seen = new Set(); const dup = [];\nfor (const r of data['商品配置'] || []) {\n  const k = r['SKU前缀'];\n  if (!k) { problems.push('商品配置: 有空 SKU前缀'); continue; }\n  if (seen.has(k)) dup.push(k);\n  seen.add(k);\n}\nif (dup.length) problems.push(`商品配置: SKU前缀重复 ${JSON.stringify([...new Set(dup)])}`);\n\nconst badRate = (data['运价表'] || []).filter(r => typeof r['下界'] !== 'number' || typeof r['上界'] !== 'number');\nif (badRate.length) problems.push(`运价表: ${badRate.length} 行下界/上界不是数字（字段类型要设「数字」）`);\n\nconst badAu = (data['澳洲分区'] || []).filter(r => !(typeof r['邮编'] === 'string' && r['邮编'].length === 4));\nif (badAu.length) problems.push(`澳洲分区: ${badAu.length} 行邮编不是 4 位文本（字段类型要设「文本」）`);\n\n// ============ 4. 输出 ============\nreturn [{\n  json: {\n    ok: problems.length === 0,\n    counts: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v.length])),\n    problems,\n    data\n  }\n}];"
+      },
+      "id": "b1000000-0000-4000-8000-000000000009",
+      "name": "汇总+体检",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 360]
+    },
+    {
+      "parameters": {},
+      "id": "b1000000-0000-4000-8000-000000000010",
+      "name": "结束",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [760, 360]
+    },
+    {
+      "parameters": {
+        "content": "## 用内置 HTTP 节点读飞书（无需装社区节点）\n\n### 1. 配置节点填 4 项\n- app_id / app_secret：飞书开放平台「凭证与基础信息」\n- app_token：多维表格地址 `/base/` 后面那串 `bascn...`\n- tbl_xxx：每张表切换标签时 URL 里的 `table=tbl...`\n\n### 2. 权限（缺一不可）\n- 应用开通 `bitable:app`\n- 多维表格右上「...」→ 协作者 → 添加应用 → **可编辑**\n\n### 3. 澳洲分区必须开分页\n9091 行 / 500 每页 = 19 页，已在节点里配好 Pagination。\n若你的 n8n 版本没有该选项：把 `page_size` 改 500 并手动加循环，或改用 `sync_config.py`。\n\n### 4. 期望 counts\n```\n商品配置 30 / 运价表 73 / 澳洲分区 9091 / 全局参数 11 / 国家规则 49\n```",
+        "height": 460,
+        "width": 520,
+        "color": 5
+      },
+      "id": "b1000000-0000-4000-8000-000000000011",
+      "name": "说明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-480, 620]
+    }
+  ],
+  "connections": {
+    "手动触发": {"main": [[{"node": "配置", "type": "main", "index": 0}]]},
+    "配置": {"main": [[{"node": "取token", "type": "main", "index": 0}]]},
+    "取token": {"main": [[
+      {"node": "HTTP 商品配置", "type": "main", "index": 0},
+      {"node": "HTTP 运价表", "type": "main", "index": 0},
+      {"node": "HTTP 全局参数", "type": "main", "index": 0},
+      {"node": "HTTP 国家规则", "type": "main", "index": 0},
+      {"node": "HTTP 澳洲分区（分页）", "type": "main", "index": 0}
+    ]]},
+    "HTTP 商品配置": {"main": [[{"node": "汇总+体检", "type": "main", "index": 0}]]},
+    "HTTP 运价表": {"main": [[{"node": "汇总+体检", "type": "main", "index": 0}]]},
+    "HTTP 全局参数": {"main": [[{"node": "汇总+体检", "type": "main", "index": 0}]]},
+    "HTTP 国家规则": {"main": [[{"node": "汇总+体检", "type": "main", "index": 0}]]},
+    "HTTP 澳洲分区（分页）": {"main": [[{"node": "汇总+体检", "type": "main", "index": 0}]]},
+    "汇总+体检": {"main": [[{"node": "结束", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "pinData": {},
+  "versionId": "1",
+  "meta": {"instanceId": "60103-feishu-http"},
+  "tags": []
+}

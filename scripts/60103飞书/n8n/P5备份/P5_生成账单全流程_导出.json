@@ -1,0 +1,1166 @@
+{
+  "updatedAt": "2026-11-16T08:09:38.158Z",
+  "createdAt": "2026-11-16T01:32:42.278Z",
+  "id": "UjY2p2gtIACSLDAL",
+  "name": "生成账单全流程",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2400,
+        240
+      ],
+      "id": "a4f26d5e-95f4-459b-a3a6-253c70cd6fc6",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "007910d4-6315-4816-89f6-c20b0316c69c",
+              "leftValue": "={{ $json.code }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "90767c81-5e2f-4048-810c-311058a8bfc3",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        -1248,
+        432
+      ],
+      "id": "08f84e10-0266-4102-93ab-06ebcf3cd313",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const arr = $input.all().flatMap(item=>{\n  return item.json.orderItem.map(order=>{\n    return {\n      \"交易编号\": item.json.salesRecordNumber,\n      \"订单编号\": item.json.platformOrderId,\n      \"原始图片\": order.originalPictureUrl,\n      \"商品数量\": order.quantity,\n      \"国家中文\": item.json.countryNameCN,\n      \"国家二字码\": item.json.countryCode,\n      \"SKU\": order.stockSku,\n      \"商品成本\": order.costPrice,\n      \"物流公司\": item.json.myLogisticsName,\n      \"物流渠道\": item.json.myLogisticsChannelName,\n      \"内部单号\": item.json.trackNumber1,\n      \"实际运费\": item.json.shippingCost,\n      \"订单备注\": item.json.remark,\n      \"邮政编码\": item.json.postCode\n    }\n  })\n})\n\nconsole.log(arr)\n\n// return $input.first().json.data.data\nreturn arr"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1248,
+        272
+      ],
+      "id": "f49e9876-ecaf-489d-8732-aedcb92c9465",
+      "name": "解析出需要的数据"
+    },
+    {
+      "parameters": {
+        "jsCode": "// return {\"startDate\": $input.first().json['订单创建开始日期'], \"endDate\": $input.first().json['订单创建结束日期']}\nreturn {\"startDate\": \"2026-11-09 00:00:00\", \"endDate\": \"2026-11-15 00:00:00\"}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2208,
+        352
+      ],
+      "id": "e094b227-db02-413d-8a43-c2eb20f087d0",
+      "name": "定义时间"
+    },
+    {
+      "parameters": {
+        "jsCode": "const startRaw = $input.first().json.startDate;\nconst endRaw = $input.first().json.endDate;\n\nconst pad2 = (n) => String(n).padStart(2, '0');\n\nfunction parseDateTime(str) {\n  // 兼容 2026-5-4、2026/5/4、2026-5-4 9:5:3、2026-05-04 09:05:03 等\n  const m = String(str).trim().match(\n    /^(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})(?:[ T](\\d{1,2}):(\\d{1,2})(?::(\\d{1,2}))?)?/\n  );\n\n  if (!m) {\n    throw new Error(`无法解析日期时间: ${str}`);\n  }\n\n  const year = Number(m[1]);\n  const month = Number(m[2]);\n  const day = Number(m[3]);\n  const hour = m[4] !== undefined ? Number(m[4]) : 0;\n  const minute = m[5] !== undefined ? Number(m[5]) : 0;\n  const second = m[6] !== undefined ? Number(m[6]) : 0;\n\n  const dateStr = `${year}-${pad2(month)}-${pad2(day)}`;\n  const dateTimeStr = `${dateStr} ${pad2(hour)}:${pad2(minute)}:${pad2(second)}`;\n\n  return {\n    year,\n    month,\n    day,\n    hour,\n    minute,\n    second,\n    dateStr,\n    dateTimeStr\n  };\n}\n\nconst start = parseDateTime(startRaw);\nconst end = parseDateTime(endRaw);\n\n// 使用 UTC 日期，避免时区导致日期错乱\nlet current = new Date(Date.UTC(start.year, start.month - 1, start.day));\nconst endDate = new Date(Date.UTC(end.year, end.month - 1, end.day));\n\nconst dateItems = [];\n\nwhile (current <= endDate) {\n  const currentDayStr = [\n    current.getUTCFullYear(),\n    pad2(current.getUTCMonth() + 1),\n    pad2(current.getUTCDate())\n  ].join('-');\n\n  let dayStart;\n  if (currentDayStr === start.dateStr) {\n    // 第一天：使用传入的开始时间，统一补零格式化\n    dayStart = start.dateTimeStr;\n  } else {\n    dayStart = `${currentDayStr} 00:00:00`;\n  }\n\n  let dayEnd;\n  if (currentDayStr === end.dateStr) {\n    // 最后一天：使用传入的结束时间，统一补零格式化\n    dayEnd = end.dateTimeStr;\n  } else {\n    dayEnd = `${currentDayStr} 23:59:59`;\n  }\n\n  dateItems.push({\n    json: {\n      api_start_time: dayStart,\n      api_end_time: dayEnd\n    }\n  });\n\n  current.setUTCDate(current.getUTCDate() + 1);\n}\n\nreturn dateItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        352
+      ],
+      "id": "aebf24ba-81ea-42be-86d7-d1db5c65f921",
+      "name": "解析时间参数"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1728,
+        352
+      ],
+      "id": "322dff9c-0fc0-46bd-80b1-fbc7c449465d",
+      "name": "循环请求某个时间范围内的所有订单数据"
+    },
+    {
+      "parameters": {
+        "jsCode": "const arr = $input.all().map(item=>{\n  console.log(item.json.data.data)\n  return item.json.data.data\n}).flat(Infinity)\n\n// console.log(arr)\n\nreturn arr"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        272
+      ],
+      "id": "8f0e0b40-fa7d-4b4a-bea7-77ebcdeadc86",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/erp-proxy",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={   \"api\": \"order-get-order-list-new\",   \"data\": {     \"createDateStart\": \"{{ $json.api_start_time }}\",     \"createDateEnd\": \"{{ $json.api_end_time }}\",     \"maxRows\": \"500\",     \"cursor\": \"\", \t\n\"shopName\":[\"60103Thecandiceshop\"]   } }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1536,
+        432
+      ],
+      "id": "666b027f-22b2-4e72-bad8-24535f420e90",
+      "name": "请求订单接口数据500条1"
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {
+          "__rl": true,
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg",
+          "mode": "id"
+        },
+        "table_id": {
+          "__rl": true,
+          "value": "tbl5f4S5fnUwH2Qu",
+          "mode": "id"
+        },
+        "body": "{\"filter\":{\"conjunction\":\"and\",\"conditions\":[\n  {\"field_name\":\"SKU前缀\",\"operator\":\"is\",\"value\":[\"{{ $json.sku }}\"]}\n]}} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        -400
+      ],
+      "id": "0e2f654b-8a93-4ace-ad2a-cbaa574712e2",
+      "name": "SearchRecords base",
+      "webhookId": "6c7b7e9f-d9d1-4f8d-9c73-c15a75a0a6fe",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {
+          "__rl": true,
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg",
+          "mode": "id"
+        },
+        "table_id": {
+          "__rl": true,
+          "value": "tbl5f4S5fnUwH2Qu",
+          "mode": "id"
+        },
+        "body": "={\"filter\":{\"conjunction\":\"and\",\"conditions\":[\n  {\"field_name\":\"SKU前缀\",\"operator\":\"is\",\"value\":[\"{{ $json.sku }}\"]}\n]}} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -1728,
+        -416
+      ],
+      "id": "db1425e9-76b6-432f-8693-bec18769fae5",
+      "name": "SearchRecords base1",
+      "webhookId": "72b050e1-8906-4718-a257-ea9b7d94ceda",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -656,
+        -304
+      ],
+      "id": "b21accd8-867d-48fc-899e-e83563e55d52",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "createRecord",
+        "app_token": {
+          "__rl": true,
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg",
+          "mode": "id"
+        },
+        "table_id": {
+          "__rl": true,
+          "value": "tbl5f4S5fnUwH2Qu",
+          "mode": "id"
+        },
+        "body": "={\n  \"fields\": {\n    \"SKU前缀\": \"{{ $('Loop Over Items').item.json.sku }}\"\n  }\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        128
+      ],
+      "id": "51764fcd-314a-48ba-a025-038e0a254798",
+      "name": "CreateRecord base",
+      "webhookId": "716e33b4-7d2c-4d9e-9f68-13ad17c7458c",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {
+          "__rl": true,
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg",
+          "mode": "id"
+        },
+        "table_id": {
+          "__rl": true,
+          "value": "tbl5f4S5fnUwH2Qu",
+          "mode": "id"
+        },
+        "body": "={\"filter\":{\"conjunction\":\"and\",\"conditions\":[\n  {\"field_name\":\"SKU前缀\",\"operator\":\"is\",\"value\":[\"{{ $json.sku }}\"]}\n]}} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -496,
+        -288
+      ],
+      "id": "d5c9565a-afa4-4867-9a7c-78670e784905",
+      "name": "SearchRecords base2",
+      "webhookId": "72b050e1-8906-4718-a257-ea9b7d94ceda",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "b69ee30b-66b7-477e-8c83-0ef7d26a9174",
+              "leftValue": "={{ $json.items }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        -336,
+        -288
+      ],
+      "id": "bb5863b7-9ea7-4745-acdb-8e1ba4c0baa8",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {
+          "__rl": true,
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg",
+          "mode": "id"
+        },
+        "table_id": {
+          "__rl": true,
+          "value": "tbl5f4S5fnUwH2Qu",
+          "mode": "id"
+        },
+        "body": "{\"filter\":{\"conjunction\":\"and\"}} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        112
+      ],
+      "id": "517fa279-44de-4a95-bda3-938d81f36741",
+      "name": "查询商品配置表",
+      "webhookId": "6c7b7e9f-d9d1-4f8d-9c73-c15a75a0a6fe",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. 动态获取表头字段名（假设上游是「列出字段」节点）\nconst standardFields = $input.first().json.items.map(item => item.field_name);\n\n// 2. 获取飞书返回的记录数组\nconst inputItems = $('查询商品配置表').first().json.items;\n\n// 3. 【核心】拍平函数：把飞书各种复杂格式统一转成干净的值\nfunction flattenValue(value) {\n  if (value === null || value === undefined) return null;          // 空字段 → null\n  if (typeof value !== 'object') return value;                     // 已是字符串/数字/布尔 → 直接返回\n  if (Array.isArray(value)) {\n    // 多行文本[{text}]、人员[{name}]、关联[{text}]等数组结构 → 提取并拼接\n    return value.map(v => {\n      if (v === null || v === undefined) return '';\n      if (typeof v === 'object') return v.text ?? v.name ?? '';\n      return String(v);\n    }).join('');\n  }\n  // 单个富文本对象 → 取 text\n  return value.text ?? value.name ?? '';\n}\n\n// 4. 遍历每条记录，构建扁平化对象\nconst outputItems = [];\n\nfor (const item of inputItems) {\n  const fields = item.fields || {};\n\n  const newObj = {\n    record_id: item.record_id\n  };\n\n  for (const fieldName of standardFields) {\n    // 【关键改动】：不再直接赋值原始值，而是经过 flattenValue 拍平\n    newObj[fieldName] = flattenValue(fields[fieldName]);\n  }\n\n  outputItems.push({ json: newObj });\n}\n\nreturn outputItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1776,
+        112
+      ],
+      "id": "986b2f60-5a3c-43a6-a4bc-9e8a72f8e655",
+      "name": "解析整个商品配置表生成对象数组"
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "getFieldList",
+        "app_token": {
+          "__rl": true,
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg",
+          "mode": "id"
+        },
+        "table_id": {
+          "__rl": true,
+          "value": "tbl5f4S5fnUwH2Qu",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -1968,
+        112
+      ],
+      "id": "084f00af-863e-4cb4-b546-b8d2edea239b",
+      "name": "获取所有字段名",
+      "webhookId": "d365837b-e5ec-4b2e-9f09-07e38ef7901f",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// 60103 匹配 + 数据完整性检查（商品配置 / 运价 / 澳洲分区），只输出 1 条消息\n// ============================================================================\nconst num = (v) => {\n  if (v === null || v === undefined || v === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\nconst blank = (v) => v === null || v === undefined || String(v).trim() === '';\n\n// ---- 1. 商品配置（字段名自动识别，遍历全部记录取并集）----\nconst cfgItems = $('解析整个商品配置表生成对象数组').all().map(i => i.json);\nif (!cfgItems.length) throw new Error('商品配置表没有读到数据');\n\n// 字段名要同时看「表头定义」（获取所有字段名）和「记录里实际有的 key」\n// —— 否则某些字段整列没填时，记录里根本没有这个 key，就会漏检\nlet fieldNames = [];\ntry {\n  const fl = $('获取所有字段名').first().json;\n  fieldNames = (fl.items || []).map(x => x.field_name).filter(Boolean);\n} catch (e) { /* 没有这个节点就只用记录 key */ }\n\nconst allKeys = [...new Set([...fieldNames, ...cfgItems.flatMap(r => Object.keys(r))])]\n  .filter(k => k !== 'record_id');\nconst findKey = (re, notRe) => allKeys.find(k => re.test(k) && (!notRe || !notRe.test(k))) || null;\n\nconst skuKey = findKey(/sku/i, null) && (findKey(/前缀|prefix/i) || findKey(/sku/i));\nif (!skuKey) throw new Error('商品配置表找不到 SKU 前缀字段，实际字段：' + allKeys.join(' / '));\n\n// 必填：没有就算不出成本；选填：有默认值\nconst REQ = [\n  { label: '采购价', key: findKey(/采购价|采购单价/, /偏远/) },\n  { label: '国内运费', key: findKey(/国内运费/, /偏远/) },\n  { label: '重量', key: findKey(/重量|weight/i, null) },\n].filter(x => x.key);\n\nif (REQ.length < 2) {\n  throw new Error('商品配置表里没识别到价格/重量字段（采购价、国内运费、重量），'\n    + '实际表头：' + allKeys.join(' / '));\n}\n\nconst OPT = [\n  { label: '服务费', key: findKey(/毛利|服务费/, /美国/) },\n  { label: '每计费单位件数', key: findKey(/每计费单位件数|计费件数/, null) },\n].filter(x => x.key);\nconst weightKey = (REQ.find(x => x.label === '重量') || {}).key || null;\n\nconst K = {\n  buy: findKey(/^采购价|采购价$/, /偏远/),\n  buyR: findKey(/偏远.*采购价/, null),\n  dom: findKey(/^国内运费|国内运费$/, /偏远/),\n  domR: findKey(/偏远.*国内运费/, null),\n  svc: findKey(/服务费$|毛利/, /美国/),\n  svcUS: findKey(/服务费_美国|美国.*服务费/, null),\n  ovC: findKey(/运价覆盖_国家/, null),\n  ovP: findKey(/运价覆盖_公斤价/, null),\n  ovF: findKey(/运价覆盖_挂号费/, null),\n  fixed: findKey(/账单固定金额/, null),\n  pack: findKey(/每计费单位件数|计费件数/, null),\n};\n\nconst cfgMap = new Map();      // 前缀 → 配置 + ok\nconst cfgIncomplete = [];      // [{前缀, 缺:[...]}]\nfor (const r of cfgItems) {\n  const cell = String(r[skuKey] ?? '').trim();\n  if (!cell) continue;\n  const isNonGoodsPrefix = /^SHIP/i.test(cell);          // 运费类/保护费这类非实物，不要求价格\n  const missReq = isNonGoodsPrefix ? [] : REQ.filter(f => blank(r[f.key])).map(f => f.label);\n  const missOpt = OPT.filter(f => blank(r[f.key])).map(f => f.label);\n  const get = (k) => (k ? num(r[k]) : null);\n  const conf = {\n    wt: weightKey ? num(r[weightKey]) : null,\n    buy: get(K.buy),\n    buyR: get(K.buyR),\n    dom: get(K.dom),\n    domR: get(K.domR),\n    svc: get(K.svc),\n    svcUS: get(K.svcUS),\n    ovC: K.ovC ? String(r[K.ovC] ?? '').trim() || null : null,\n    ovP: get(K.ovP),\n    ovF: get(K.ovF),\n    fixed: get(K.fixed),\n    pack: get(K.pack) || 1,\n    ok: missReq.length === 0,\n  };\n  for (const a of cell.split(/[,，、]/).map(s => s.trim()).filter(Boolean)) {\n    cfgMap.set(a, conf);\n    if (missReq.length) cfgIncomplete.push({ 前缀: a, 缺: missReq, 缺选填: missOpt });\n  }\n}\nconst prefixList = [...cfgMap.keys()].sort((a, b) => b.length - a.length);\n\n// ---- 2. 运价表（来自「运价表索引」节点，已做过重叠/缺口/空价校验）----\nconst rateIdx = $('运价表索引').first().json;\nconst rates = new Map();                 // 国家 → [{lo,hi,p,fee,线路}]\nfor (const s of (rateIdx.index || [])) {\n  if (!rates.has(s.国家)) rates.set(s.国家, []);\n  rates.get(s.国家).push(s);\n}\nfor (const arr of rates.values()) arr.sort((a, b) => a.lo - b.lo);\n\n// 国家 → 毛利（服务费兜底）\nconst margins = new Map();\nfor (const s of (rateIdx.index || [])) {\n  if (s.毛利 !== null && s.毛利 !== undefined && !margins.has(s.国家)) margins.set(s.国家, s.毛利);\n}\n\nconst rateProblems = rateIdx.problems || {};\nconst rateBadRows = (rateProblems.badPrice || []).map(m => ({ 国家: m.国家, 段: m.段, 缺: m.缺 }));\nconst noMargin = (rateIdx.index || []).filter(x => x.毛利 === null || x.毛利 === undefined).length;\n\n// ---- 2.5 国家规则（欧盟税 / 附加费 / 服务费覆盖）----\nconst countryItems = $('解析国家配置表').all().map(i => i.json);\nconst rules = new Map();\nfor (const r of countryItems) {\n  const c = String(r['国家'] ?? '').trim();\n  if (!c) continue;\n  const st = String(r['状态'] ?? '').trim();\n  if (st && st !== '生效') continue;                 // 有「状态」就按生效过滤，没这列就不管\n  rules.set(c, {\n    isEU: String(r['是否欧盟'] ?? '').trim() === '是',\n    surcharge: num(r['订单附加费']) ?? 0,\n    service: num(r['服务费覆盖']),\n    taxUsd: num(r['欧盟税额$']),\n  });\n}\n\n// ---- 2.6 全局参数（汇率 / 欧盟税）----\nconst paramItems = $('解析全局参数').all().map(i => i.json);\nconst P = {};\nfor (const r of paramItems) {\n  const k = String(r['参数键'] ?? '').trim();\n  if (k) P[k] = num(r['参数值']);\n}\nconst FX = P['USD_CNY'] ?? 6.65;\nconst EUR = P['EU_TAX_EUR'] ?? 3;\nconst EUR2USD = P['EUR_USD'] ?? 0.9;\nconst EU_TAX = Math.round((EUR / EUR2USD) * 100) / 100;   // 3 ÷ 0.9 = 3.33\nconst MULT = P['DEFAULT_SERVICE_FEE'] ?? 1.15;\nconst ROUND_N = P['BILL_ROUND'] ?? 2;\n\n// ---- 3. 澳洲分区：本轮暂停（分区表 9091 行，性能原因先跳过）----\n// ---- 4. 订单 ----\nconst orders = $input.all().map(i => i.json).filter(r => r && r.SKU);\nif (!orders.length) throw new Error('上游没有订单明细');\n\nconst matchPrefix = (sku) => {\n  const s = String(sku).trim();\n  for (const p of prefixList) {\n    if (s === p || s.startsWith(p + '-') || s.startsWith(p + '_')) return p;\n  }\n  return null;\n};\nconst guessPrefix = (sku) => {\n  const head = String(sku).split('_')[0];\n  const parts = head.split('-');\n  return parts.length >= 2 ? parts.slice(0, 2).join('-') : head;\n};\n\n// ---- 5. 逐行匹配 ----\nconst missSku = new Map();      // ① 前缀不存在\nconst missCfg = new Set();      // ② 前缀存在但必填为空\nconst missRate = new Map();     // ③ 运价缺失\nconst auMissing = new Map();    // ⑤ 澳洲邮编查不到分区\nconst orderWeight = new Map();\nconst blockedBySku = new Set();\nconst blockedByCfg = new Set();\nconst orderInfo = new Map();\nconst orderRows = new Map();    // 交易编号 → 行\nlet matchedRows = 0;\nconst allOrders = new Set();\n\nconst isNonGoodsOf = (r) =>\n  String(r.SKU).toUpperCase().startsWith('SHIP') && !String(r['原始图片'] || '').trim();\n\nfor (const r of orders) {\n  const txn = r['交易编号'];\n  allOrders.add(txn);\n  if (!orderRows.has(txn)) orderRows.set(txn, []);\n  orderRows.get(txn).push(r);\n\n  let country = String(r['国家中文'] || '').trim();\n  if (country === '美国' && String(r['物流渠道'] || '').includes('岛屿')) country = '美国（偏远）';\n\n  // 澳大利亚：分区由「合并澳洲分区」节点按邮编单条查到，拼进 r['澳洲分区']\n  let auPc = null;\n  if (country === '澳大利亚') {\n    auPc = String(r['澳洲邮编'] || r['邮政编码'] || '').replace(/\\D/g, '').padStart(4, '0').slice(-4);\n    const zone = r['澳洲分区'];\n    if (zone !== null && zone !== undefined && zone !== '') {\n      country = `澳大利亚（${Number(zone)}区）`;\n    } else {\n      const m = auMissing.get(auPc || '(空)') || { 邮编: auPc || '(空)', 订单: new Set() };\n      m.订单.add(txn);\n      auMissing.set(auPc || '(空)', m);\n    }\n  }\n\n  if (!orderInfo.has(txn)) orderInfo.set(txn, { 国家: country });\n  else orderInfo.get(txn).国家 = country;\n\n  const hit = matchPrefix(r.SKU);\n  const qty = num(r['商品数量']) ?? 1;\n\n  if (!hit) {\n    blockedBySku.add(txn);\n    const g = guessPrefix(r.SKU);\n    const m = missSku.get(g) || { 标识: g, 订单: new Set(), 行: 0, SKU: new Set(), 样例SKU: r.SKU };\n    m.订单.add(txn); m.行 += 1; m.SKU.add(r.SKU);\n    missSku.set(g, m);\n  } else {\n    const cfg = cfgMap.get(hit);\n    if (!cfg.ok) {\n      blockedByCfg.add(txn);\n      missCfg.add(hit);\n    } else {\n      matchedRows++;\n      const rowWt = isNonGoodsOf(r) ? 0 : (cfg.wt ?? 0.17) * qty;\n      orderWeight.set(txn, (orderWeight.get(txn) || 0) + rowWt);\n    }\n  }\n\n\n}\n\n// ---- 6. 运价段匹配（整单重量 → 段价）----\nlet checkedRate = 0;\nconst segByOrder = new Map();\nfor (const [txn, info] of orderInfo) {\n  if (blockedBySku.has(txn) || blockedByCfg.has(txn)) continue;\n  // 澳洲邮编查不到分区的单，国家名还是「澳大利亚」，运价表里没有这个国家 → 会被判缺运价，\n  // 但真正原因是分区缺失，所以先跳过，避免重复报\n  if (auMissing.size && [...auMissing.values()].some(m => m.订单.has(txn))) continue;\n  checkedRate++;\n  const w = Math.round((orderWeight.get(txn) || 0) * 1000) / 1000;\n  const segs = rates.get(info.国家) || [];\n  const seg = segs.find(x => x.lo < w && w <= x.hi) || null;\n  segByOrder.set(txn, { w, seg, segs });\n\n  if (!seg) {\n    blocked.add(txn);\n    const k = `${info.国家}|${w}kg`;\n    const m = missRate.get(k) || {\n      国家: info.国家, 重量: w, 订单: new Set(),\n      现有: segs.length ? segs.map(x => `${x.lo}-${x.hi}`).join('、') : '运价表没有该国家',\n    };\n    m.订单.add(txn);\n    missRate.set(k, m);\n  }\n}\n\n// 阻断单集合（SKU 缺 / 配置不全 / 澳洲缺分区 / 缺运价）\nconst blocked = new Set([...blockedBySku, ...blockedByCfg]);\nfor (const m of auMissing.values()) for (const t of m.订单) blocked.add(t);\n\n// ---- 6.5 逐行计价（公斤价 / 挂号费 / 运费 / 成本 / 履行价）----\nconst detail = [];\nconst totals = { 运费: 0, 成本: 0, 国内运费: 0, 履行价: 0, 挂号费: 0 };\n\nfor (const [txn, rows] of orderRows) {\n  const info = orderInfo.get(txn) || {};\n  const country = info.国家 || '';\n  const priced = segByOrder.get(txn) || null;\n\n  // 运费行 = 同单第一个非固定金额商品\n  let freightRow = null;\n  const skuQty = new Map();\n  for (const r of rows) {\n    skuQty.set(r.SKU, (skuQty.get(r.SKU) || 0) + (num(r['商品数量']) ?? 1));\n  }\n  for (const r of rows) {\n    const cfg = cfgMap.get(matchPrefix(r.SKU) || '');\n    if (cfg && cfg.fixed !== null) continue;\n    freightRow = r;\n    break;\n  }\n  const seenSku = new Set();\n\n  for (const r of rows) {\n    const hit = matchPrefix(r.SKU);\n    const cfg = hit ? cfgMap.get(hit) : null;\n    const qty = num(r['商品数量']) ?? 1;\n    const nonGoods = isNonGoodsOf(r);\n    const isFixed = cfg ? cfg.fixed !== null : false;\n\n    const wtUnit = cfg && cfg.wt !== null ? cfg.wt : null;\n    const rowWt = nonGoods ? 0 : Math.round((wtUnit ?? 0.17) * qty * 1000) / 1000;\n\n    // 运价覆盖优先\n    const useOv = cfg && cfg.ovC && cfg.ovC === country && cfg.ovP !== null;\n    const p = isFixed ? null\n      : (useOv ? cfg.ovP : (priced && priced.seg ? priced.seg.p : null));\n    const fee = isFixed ? null\n      : (useOv\n          ? (cfg.ovF !== null ? cfg.ovF : (priced && priced.seg ? priced.seg.fee : null))\n          : (priced && priced.seg ? priced.seg.fee : null));\n\n    const isFreightRow = freightRow === r;\n    const 行运费 = (p === null ? 0 : Math.round(p * rowWt * 100) / 100);\n    const 挂号费 = (isFreightRow && fee !== null) ? fee : 0;\n    const 运费 = Math.round((行运费 + 挂号费) * 100) / 100;\n\n    const 采购价 = nonGoods ? 0 : (cfg ? ((info.国家 === '美国（偏远）' && cfg.buyR !== null) ? cfg.buyR : cfg.buy) ?? 0 : 0);\n    const 成本 = Math.round(qty * 采购价 * 100) / 100;\n\n    const 国内运费单价 = nonGoods ? 0 : (cfg ? ((info.国家 === '美国（偏远）' && cfg.domR !== null) ? cfg.domR : cfg.dom) ?? 0 : 0);\n    const packN = Math.max(1, (cfg && cfg.pack) || 1);\n    const firstOfSku = !seenSku.has(r.SKU);\n    seenSku.add(r.SKU);\n    const 份数 = firstOfSku ? Math.ceil((skuQty.get(r.SKU) || 0) / packN) : 0;\n    const 国内运费合计 = Math.round(国内运费单价 * 份数 * 100) / 100;\n\n    const 固定金额合计 = isFixed ? Math.round(cfg.fixed * 份数 * 100) / 100 : 0;\n\n    // 服务费：美国列 > 普通列 > 运费表毛利 > 1.15\n    const isUS = country.startsWith('美国');\n    let 服务费 = null;\n    if (cfg) {\n      if (isUS && cfg.svcUS !== null) 服务费 = cfg.svcUS;\n      else if (cfg.svc !== null) 服务费 = cfg.svc;\n    }\n    const rule = rules.get(country) || {};\n    if (服务费 === null && rule.service !== null && rule.service !== undefined) 服务费 = rule.service;\n    if (服务费 === null) 服务费 = margins.get(country) ?? MULT;\n\n    const 履行价 = Math.round((运费 + 成本 + 国内运费合计) * 100) / 100;\n\n    // 附加费只落订单首行\n    const isFirstRowOfOrder = rows[0] === r;\n    const 附加费 = isFirstRowOfOrder ? (rule.surcharge || 0) : 0;\n\n    // 人民币 = (运费 + 件数×采购价 + 国内运费 + 附加费) × 服务费\n    let 人民币 = Math.round((运费 + 成本 + 国内运费合计 + 附加费) * 服务费 * 100) / 100;\n    // 固定金额行：总价锁死 = 固定金额 × 份数（美元）→ 折人民币\n    if (isFixed) 人民币 = Math.round(固定金额合计 * FX * 100) / 100;\n    const 美元 = Math.round((人民币 / FX) * 10000) / 10000;\n\n    // 欧盟税（整单一次，只落首行）\n    const 欧盟税 = isFirstRowOfOrder && rule.isEU ? EU_TAX : 0;\n\n    if (priced && priced.seg) {\n      totals.运费 += 运费;\n      totals.挂号费 += 挂号费;\n      totals.成本 += 成本;\n      totals.国内运费 += 国内运费合计;\n      totals.履行价 += 履行价;\n    }\n\n    detail.push({\n      交易编号: txn,\n      订单编号: r['订单编号'] || '',\n      国家: country,\n      物流公司: r['物流公司'] || '',\n      物流渠道: r['物流渠道'] || '',\n      内部单号: r['内部单号'] || '',\n      图片: r['原始图片'] || '',\n      邮政编码: r['邮政编码'] || '',\n      SKU: r.SKU,\n      前缀: hit || '',\n      件数: qty,\n      单件重量: wtUnit,\n      行重量: rowWt,\n      整单重量: priced ? priced.w : null,\n      线路: priced && priced.seg ? priced.seg.线路 : '',\n      公斤价: p,\n      挂号费: fee,\n      运费行: isFreightRow,\n      行运费,\n      挂号费合计: 挂号费,\n      运费,\n      采购价,\n      成本,\n      国内运费单价,\n      国内运费份数: 份数,\n      国内运费合计,\n      履行价,\n      服务费,\n      附加费,\n      人民币,\n      美元,\n      欧盟税,\n      固定金额合计,\n      缺运价: Boolean(priced && !priced.seg),\n      非实物: nonGoods,\n      缺配置: !hit || (cfg && !cfg.ok) || false,\n    });\n  }\n}\n\n// 订单级：账单 = ROUND(Σ美元 + 欧盟税, 2)；毛利 = 账单×汇率 − 履行价\nconst perOrderUsd = new Map();\nconst perOrderCost = new Map();\nconst perOrderTax = new Map();\nfor (const x of detail) {\n  perOrderUsd.set(x.交易编号, Math.round(((perOrderUsd.get(x.交易编号) || 0) + x.美元) * 1e6) / 1e6);\n  perOrderCost.set(x.交易编号, Math.round(((perOrderCost.get(x.交易编号) || 0) + x.履行价) * 100) / 100);\n  if (x.欧盟税) perOrderTax.set(x.交易编号, x.欧盟税);\n}\nconst billOf = new Map();\nfor (const [txn, usd] of perOrderUsd) {\n  const tax = perOrderTax.get(txn) || 0;\n  billOf.set(txn, Math.round((usd + tax) * Math.pow(10, ROUND_N)) / Math.pow(10, ROUND_N));\n}\nfor (const x of detail) {\n  x.订单美元合计 = perOrderUsd.get(x.交易编号);\n  x.账单金额 = billOf.get(x.交易编号);\n  x.订单履行价 = perOrderCost.get(x.交易编号);\n  x.毛利 = Math.round((x.账单金额 * FX - x.订单履行价) * 100) / 100;\n}\n\nfor (const k of Object.keys(totals)) totals[k] = Math.round(totals[k] * 100) / 100;\ntotals.人民币 = Math.round(detail.reduce((s2, x) => s2 + x.人民币, 0) * 100) / 100;\ntotals.账单 = Math.round([...billOf.entries()]\n  .filter(([txn]) => !blocked.has(txn))\n  .reduce((s2, [, v]) => s2 + v, 0) * 100) / 100;\n// 毛利按订单逐单算再累加（避免整体相减的尾差）\nlet grossTotal = 0;\nfor (const [txn, bill] of billOf) {\n  if (blocked.has(txn)) continue;                 // 阻断单不计毛利\n  const cost = perOrderCost.get(txn) || 0;\n  grossTotal += Math.round((bill * FX - cost) * 100) / 100;\n}\ntotals.毛利 = Math.round(grossTotal * 100) / 100;\n\n// ---- 7. 组一条消息 ----\nconst skuList = [...missSku.values()].sort((a, b) => b.订单.size - a.订单.size);\nconst cfgList = cfgIncomplete.filter(x => missCfg.has(x.前缀)).sort((a, b) => a.前缀.localeCompare(b.前缀));\nconst rateList = [...missRate.values()].sort((a, b) => b.订单.size - a.订单.size);\n\n\nfor (const m of rateList) for (const t of m.订单) blocked.add(t);\n\n\nconst TOP = 20;\nconst L = [];\nL.push('【60103 匹配异常汇总】');\nL.push(`订单 ${allOrders.size} 单 / ${orders.length} 行；可继续 ${allOrders.size - blocked.size} 单，需补 ${blocked.size} 单。`);\n\nL.push('');\nL.push(`━━ ① 商品配置：没有该 SKU 前缀（${skuList.length} 个）━━`);\nif (!skuList.length) L.push('无');\nelse {\n  skuList.slice(0, TOP).forEach((m, i) => {\n    L.push(`${i + 1}. ${m.标识}（${m.订单.size} 单 / ${m.行} 行 / ${m.SKU.size} 个SKU）`);\n    L.push(`   例：${m.样例SKU}`);\n  });\n  if (skuList.length > TOP) L.push(`… 还有 ${skuList.length - TOP} 个未列出`);\n}\n\nL.push('');\nL.push(`━━ ② 商品配置：有前缀但价格没填（${cfgList.length} 个）━━`);\nif (!cfgList.length) L.push('无');\nelse {\n  const groups = new Map();\n  for (const m of cfgList) {\n    const k = m.缺.join('、');\n    if (!groups.has(k)) groups.set(k, []);\n    groups.get(k).push(m.前缀);\n  }\n  let n = 0;\n  for (const [lack, names] of groups) {\n    n += 1;\n    L.push(`${n}. 缺「${lack}」共 ${names.length} 个：`);\n    L.push('   ' + names.slice(0, 40).join('、') + (names.length > 40 ? ` …等 ${names.length} 个` : ''));\n  }\n  const optMissing = [...new Set(cfgList.flatMap(m => m.缺选填))];\n  if (optMissing.length) L.push(`（另有选填项未填：${optMissing.join('、')}，会用默认值）`);\n}\n\nL.push('');\nL.push(`━━ ③ 运价缺失：该重量没有段（${rateList.length} 项）━━`);\nconst skippedRate = new Set([...blockedBySku, ...blockedByCfg]).size;\nif (!rateList.length) {\n  if (skippedRate && checkedRate) {\n    L.push(`已校验 ${checkedRate} 单，均能查到运价；${skippedRate} 单因 ①/② 未通过，跳过运价校验`);\n  } else if (skippedRate) {\n    L.push(`未校验：${skippedRate} 单因 ①/② 未通过，本轮跳过运价匹配`);\n  } else L.push('无');\n}\nelse {\n  rateList.slice(0, TOP).forEach((m, i) => {\n    L.push(`${i + 1}. ${m.国家}｜${m.重量}kg（${m.订单.size} 单）`);\n    L.push(`   现有段：${m.现有}`);\n  });\n  if (rateList.length > TOP) L.push(`… 还有 ${rateList.length - TOP} 项未列出`);\n}\n\nL.push('');\nL.push(`━━ ④ 运价表：区间/价格不完整的行（${rateBadRows.length} 行）━━`);\nif (!rateBadRows.length) L.push('无');\nelse {\n  rateBadRows.slice(0, TOP).forEach((m, i) => {\n    L.push(`${i + 1}. ${m.国家}｜${m.段} —— 缺 ${m.缺.join('、')}`);\n  });\n  if (rateBadRows.length > TOP) L.push(`… 还有 ${rateBadRows.length - TOP} 行未列出`);\n}\n\nL.push('');\nconst auList = [...auMissing.values()].sort((a, b) => b.订单.size - a.订单.size);\nL.push(`━━ ⑤ 澳洲分区缺失（${auList.length} 个邮编）━━`);\nif (!auList.length) L.push('无');\nelse {\n  auList.slice(0, TOP).forEach((m, i) => {\n    L.push(`${i + 1}. 邮编 ${m.邮编}（${m.订单.size} 单）—— 分区表里查不到，需补`);\n  });\n  if (auList.length > TOP) L.push(`… 还有 ${auList.length - TOP} 个未列出`);\n  for (const m of auList) for (const t of m.订单) blocked.add(t);\n}\n\n// ⑥ 运价表结构问题（来自「运价表索引」的校验结果）\nconst rp = rateProblems;\nconst gCount = (rp.gaps || []).length;\nconst oCount = (rp.overlap || []).length;\nconst bCount = (rp.badPrice || []).length;\nconst zCount = (rp.notFromZero || []).length;\nL.push('');\nL.push(`━━ ⑥ 运价表结构（重叠 ${oCount} / 缺口 ${gCount} / 空价 ${bCount} / 首段不从0 ${zCount}）━━`);\nif (!oCount && !gCount && !bCount) L.push('无影响匹配的问题');\n(rp.overlap || []).slice(0, 5).forEach(m => L.push(`重叠：${m.国家} ${m.前段} 与 ${m.后段}（同一个重量会命中两条，只取第一条）`));\n(rp.gaps || []).slice(0, 5).forEach(m => L.push(`缺口：${m.国家} ${m.缺口}kg 没有运价（${m.大小}kg）`));\n(rp.badPrice || []).slice(0, 5).forEach(m => L.push(`空价：${m.国家} ${m.段} 缺 ${m.缺.join('、')}`));\nif (zCount) {\n  L.push(`首段不从 0 开始的国家 ${zCount} 个（低于首段下界会被判缺运价）：`\n    + (rp.notFromZero || []).slice(0, 8).map(m => `${m.国家}(${m.首段})`).join('、')\n    + (zCount > 8 ? ' …' : ''));\n}\n\nif (noMargin) {\n  L.push('');\n  L.push(`提示：运价表有 ${noMargin} 行没填「毛利」，这些国家按默认服务费计算。`);\n}\n\nconst hasBlock = skuList.length || cfgList.length || rateList.length || rateBadRows.length || auList.length;\nif (hasBlock) {\n  L.push('');\n  L.push('补齐后重跑本流程即可。');\n}\n\nreturn [{\n  json: {\n    totalOrders: allOrders.size,\n    totalRows: orders.length,\n    matchedRows,\n    blockedOrders: blocked.size,\n    missingSku: skuList.length,\n    missingCfg: cfgList.length,\n    missingRate: rateList.length,\n    badRateRows: rateBadRows.length,\n    rateProblems: rateProblems.summary || {},\n    missingAu: auList.length,\n    missingCount: skuList.length + cfgList.length + rateList.length + rateBadRows.length + auList.length,\n    message: L.join('\\n'),\n    missingList: [\n      ...skuList.map(m => ({ 级别: '阻断', 类型: 'SKU前缀缺失', 标识: m.标识,\n        说明: `商品配置里没有前缀「${m.标识}」`, 订单数: m.订单.size, 行数: m.行, 样例: m.样例SKU })),\n      ...cfgList.map(m => ({ 级别: '阻断', 类型: '商品配置不全', 标识: m.前缀,\n        说明: `缺 ${m.缺.join('、')}`, 订单数: 0, 行数: 0, 样例: '' })),\n      ...rateList.map(m => ({ 级别: '阻断', 类型: '运价缺失', 标识: `${m.国家}|${m.重量}kg`,\n        说明: `现有段：${m.现有}`, 订单数: m.订单.size, 行数: 0, 样例: '' })),\n      ...rateBadRows.map(m => ({ 级别: '阻断', 类型: '运价表空价', 标识: `${m.国家}|${m.段}`,\n        说明: `缺 ${m.缺.join('、')}`, 订单数: 0, 行数: 0, 样例: '' })),\n      ...auList.map(m => ({ 级别: '阻断', 类型: '澳洲分区缺失', 标识: `邮编${m.邮编}`,\n        说明: '分区表查不到该邮编', 订单数: m.订单.size, 行数: 0, 样例: '' })),\n    ],\n    totals,\n    params: { FX, EUR, EUR2USD, EU_TAX, MULT, ROUND_N },\n    detailCount: detail.length,\n    detail: detail,\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        300
+      ],
+      "id": "f47efd4f-3ab3-4957-be03-cd0e5f6ef609",
+      "name": "匹配商品配置"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "102b10b7-36f1-492d-a28e-6a708403141c",
+              "leftValue": "={{ $json.missingCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -180,
+        300
+      ],
+      "id": "97b3d92e-768b-4134-be43-4338d2890ac3",
+      "name": "有缺失？"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "receive_id_type": "chat_id",
+        "receive_id": {
+          "__rl": true,
+          "mode": "id",
+          "value": "oc_76b442ae3f9e004ad15fc88783e24bba"
+        },
+        "msg_type": "text",
+        "content": "={{ JSON.stringify({ text: $json.message }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        60,
+        180
+      ],
+      "id": "1fe82707-5f8f-47fa-930f-54363da7ddbf",
+      "name": "发送飞书群消息",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        60,
+        420
+      ],
+      "id": "228e7812-804f-45c3-b195-16bdaf5ea080",
+      "name": "全部匹配"
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {
+          "__rl": true,
+          "mode": "id",
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg"
+        },
+        "table_id": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblCJKlb76TB041j"
+        },
+        "whether_paging": false,
+        "body": "{}",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -1536,
+        40
+      ],
+      "id": "f7e8ed61-be2c-4631-bf54-b19675e81c93",
+      "name": "查询物流运费表",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 飞书记录 → 扁平对象（数组取 text/name 拼接）\nfunction flattenValue(v) {\n  if (v === null || v === undefined) return null;\n  if (typeof v !== 'object') return v;\n  if (Array.isArray(v)) {\n    return v.map(x => (x === null || x === undefined) ? ''\n      : (typeof x === 'object' ? (x.text ?? x.name ?? '') : String(x))).join('');\n  }\n  return v.text ?? v.name ?? '';\n}\n\nconst items = $input.first().json.items || [];\nif (!items.length) throw new Error('上一节点没有取到记录');\n\nreturn items.map(r => {\n  const o = { record_id: r.record_id };\n  for (const [k, v] of Object.entries(r.fields || {})) o[k] = flattenValue(v);\n  return { json: o };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        40
+      ],
+      "id": "5b74e701-f85a-4996-bd9b-7c755c8d3846",
+      "name": "解析物流运费表"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// 物流运费表 → 索引 + 结构校验\n//   输入：「解析物流运费表」的每一行（国家/线路/下界/上界/公斤价/挂号费/毛利）\n//   输出：1 个 item { index, problems, countries, segments }\n// ============================================================================\nconst num = (v) => {\n  if (v === null || v === undefined || v === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n\nconst rows = $input.all().map(i => i.json).filter(r => r && r['国家']);\nif (!rows.length) throw new Error('物流运费表没有读到数据');\n\nconst EPS = 1e-9;\nconst GAP_TOL = 0.0011;        // 0.001 的缝是「下界开上界闭」写法造成的，忽略\n\nconst byCountry = new Map();   // 国家 → [段]\nconst badPrice = [];           // 价格/区间为空\n\nfor (const r of rows) {\n  const c = String(r['国家']).trim();\n  const line = String(r['线路'] ?? '').trim() || '';\n  const lo = num(r['下界']), hi = num(r['上界']);\n  const p = num(r['公斤价']), fee = num(r['挂号费']);\n  const lack = [];\n  if (lo === null) lack.push('下界');\n  if (hi === null) lack.push('上界');\n  if (p === null) lack.push('公斤价');\n  if (fee === null) lack.push('挂号费');\n  if (lack.length) {\n    badPrice.push({ 国家: c, 线路: line, 段: `${r['下界'] ?? '?'}~${r['上界'] ?? '?'}`, 缺: lack });\n    continue;\n  }\n  if (hi <= lo) {\n    badPrice.push({ 国家: c, 线路: line, 段: `${lo}~${hi}`, 缺: ['上界≤下界'] });\n    continue;\n  }\n  if (!byCountry.has(c)) byCountry.set(c, []);\n  byCountry.get(c).push({ 国家: c, 线路: line, lo, hi, p, fee, 毛利: num(r['毛利']) });\n}\n\nconst index = [];\nconst overlap = [];\nconst gaps = [];\nconst notFromZero = [];\n\nfor (const [c, segs] of byCountry) {\n  segs.sort((a, b) => a.lo - b.lo);\n  index.push(...segs);\n\n  if (segs[0].lo > GAP_TOL) {\n    notFromZero.push({ 国家: c, 首段: `${segs[0].lo}~${segs[0].hi}` });\n  }\n  for (let i = 1; i < segs.length; i++) {\n    const prev = segs[i - 1], cur = segs[i];\n    const diff = cur.lo - prev.hi;\n    if (diff < -EPS) {\n      overlap.push({ 国家: c, 前段: `${prev.lo}~${prev.hi}`, 后段: `${cur.lo}~${cur.hi}` });\n    } else if (diff > GAP_TOL) {\n      gaps.push({ 国家: c, 缺口: `${+prev.hi.toFixed(3)}~${+cur.lo.toFixed(3)}`, 大小: +diff.toFixed(3) });\n    }\n  }\n}\n\nconst problems = { overlap, gaps, badPrice, notFromZero };\n\nconst countries = [...byCountry.keys()].sort();\nconst lines = [...new Set(rows.map(r => String(r['线路'] ?? '').trim()).filter(Boolean))];\n\nreturn [{\n  json: {\n    ok: overlap.length === 0 && badPrice.length === 0,\n    countries: countries.length,\n    segments: index.length,\n    lines,\n    index,\n    problems,\n    summary: {\n      重叠: overlap.length,\n      缺口: gaps.length,\n      价格为空: badPrice.length,\n      首段不从0: notFromZero.length,\n    },\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        40
+      ],
+      "id": "2bd6b657-ac53-4e90-a1e7-6ccccbb3c314",
+      "name": "运价表索引"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// 提取澳大利亚邮编（去重，只查这些邮编，避免全表 9091 行）\n//   输入：「解析出需要的数据」的订单明细\n//   输出：每个唯一邮编一个 item，下游按邮编单条查询分区\n// ============================================================================\nconst rows = $input.all().map(i => i.json).filter(r => r && r.SKU);\n\nconst set = new Set();\nfor (const r of rows) {\n  if (String(r['国家中文'] || '').trim() !== '澳大利亚') continue;\n  const pc = String(r['邮政编码'] || '').replace(/\\D/g, '').padStart(4, '0').slice(-4);\n  if (pc.length === 4) set.add(pc);\n}\n\n// 没有澳洲单也要输出 1 条，否则下游节点不会执行、整条链断掉\nif (!set.size) set.add('__NONE__');\n\nreturn [...set].map(pc => ({ json: { 邮编: pc } }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1040,
+        300
+      ],
+      "id": "e2b5fe55-9681-4169-83f0-99155d1e125e",
+      "name": "提取澳洲邮编"
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {
+          "__rl": true,
+          "mode": "id",
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg"
+        },
+        "table_id": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbldgTMSrvh4PLj7"
+        },
+        "whether_paging": false,
+        "body": "={{ JSON.stringify({ filter: { conjunction: 'and', conditions: [ { field_name: '邮编', operator: 'is', value: [String($json.邮编)] } ] } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -830,
+        300
+      ],
+      "id": "111956cb-4e65-4dd0-83b2-16617f7a184e",
+      "name": "查询澳大利亚分区表",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      },
+      "notes": "按邮编单条查询（不用全量 9091 行）"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// 合并澳洲分区：把「查询澳大利亚分区表」的结果拼回订单\n//   输出：订单明细（原样）+ 澳洲邮编 / 澳洲分区\n// ============================================================================\nconst map = new Map();\n\nfor (const it of $('查询澳大利亚分区表').all()) {\n  for (const rec of (it.json.items || [])) {\n    const f = rec.fields || {};\n    let pc = f['邮编'];\n    if (Array.isArray(pc)) pc = (pc[0] && (pc[0].text ?? pc[0])) ?? '';\n    pc = String(pc ?? '').trim().padStart(4, '0');\n\n    let zone = f['分区'];\n    if (zone && typeof zone === 'object') zone = zone.value ?? zone;\n\n    if (pc.length === 4 && zone !== null && zone !== undefined && zone !== '' && !map.has(pc)) {\n      map.set(pc, Number(zone));\n    }\n  }\n}\n\nconst rows = $('解析出需要的数据').all().map(i => i.json).filter(r => r && r.SKU);\n\nreturn rows.map(r => {\n  const o = { ...r };\n  if (String(o['国家中文'] || '').trim() === '澳大利亚') {\n    const pc = String(o['邮政编码'] || '').replace(/\\D/g, '').padStart(4, '0').slice(-4);\n    o['澳洲邮编'] = pc;\n    o['澳洲分区'] = map.has(pc) ? map.get(pc) : null;\n  }\n  return { json: o };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        300
+      ],
+      "id": "e0b27361-f80c-45bb-bf27-67752138ab74",
+      "name": "合并澳洲分区"
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {
+          "__rl": true,
+          "mode": "id",
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg"
+        },
+        "table_id": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblEHGr6G06eHFMz"
+        },
+        "whether_paging": false,
+        "body": "{}",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -60
+      ],
+      "id": "3e6f5956-4afe-48c0-b634-5d6138af5ad6",
+      "name": "查询国家配置表",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 飞书记录 → 扁平对象\nfunction flattenValue(v) {\n  if (v === null || v === undefined) return null;\n  if (typeof v !== 'object') return v;\n  if (Array.isArray(v)) {\n    return v.map(x => (x === null || x === undefined) ? ''\n      : (typeof x === 'object' ? (x.text ?? x.name ?? '') : String(x))).join('');\n  }\n  return v.text ?? v.name ?? '';\n}\nconst items = $input.first().json.items || [];\nreturn items.map(r => {\n  const o = { record_id: r.record_id };\n  for (const [k, v] of Object.entries(r.fields || {})) o[k] = flattenValue(v);\n  return { json: o };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -700,
+        -60
+      ],
+      "id": "786ab07f-c7f1-4027-9316-5430d83c6706",
+      "name": "解析国家配置表"
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {
+          "__rl": true,
+          "mode": "id",
+          "value": "HR4FbzkLAaNSUxsdyEzc0ctCnqg"
+        },
+        "table_id": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblW7jedNiRxxdEH"
+        },
+        "whether_paging": false,
+        "body": "{}",
+        "options": {}
+      },
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        -60
+      ],
+      "id": "98cd312e-2e6a-4ef0-a3af-473fe9d1b3b5",
+      "name": "查询全局参数",
+      "credentials": {
+        "larkApi": {
+          "id": "tEcMLjsz3qTBqnWO",
+          "name": "Lark Tenant Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 飞书记录 → 扁平对象\nfunction flattenValue(v) {\n  if (v === null || v === undefined) return null;\n  if (typeof v !== 'object') return v;\n  if (Array.isArray(v)) {\n    return v.map(x => (x === null || x === undefined) ? ''\n      : (typeof x === 'object' ? (x.text ?? x.name ?? '') : String(x))).join('');\n  }\n  return v.text ?? v.name ?? '';\n}\nconst items = $input.first().json.items || [];\nreturn items.map(r => {\n  const o = { record_id: r.record_id };\n  for (const [k, v] of Object.entries(r.fields || {})) o[k] = flattenValue(v);\n  return { json: o };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        -60
+      ],
+      "id": "09e0f456-231d-4e36-9108-f42efa135fd3",
+      "name": "解析全局参数"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 把匹配结果整理成「写表用」的 JSON\nconst d = $('匹配商品配置').first().json;\nconst ts = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace(/[-:T]/g, '').slice(0, 14);\n\nconst payload = {\n  detail: d.detail || [],\n  missingList: d.missingList || [],\n  params: d.params || {},\n  totals: d.totals || {},\n};\n\nreturn [{\n  json: {\n    detailPath: '/data/data/workflow003/60103飞书/data/bill_detail.json',\n    outPath: `/data/data/workflow003/60103飞书/输出/60103计算表_${ts}.xlsx`,\n    rows: (d.detail || []).length,\n    orders: d.totalOrders,\n  },\n  binary: {\n    data: {\n      data: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64'),\n      mimeType: 'application/json',\n      fileName: 'bill_detail.json',\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        420
+      ],
+      "id": "6c49d9d9-a797-4adb-b1cc-1fd24427dcf0",
+      "name": "整理待写数据"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.detailPath }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        540,
+        420
+      ],
+      "id": "e1a93c54-a4ef-490a-be7e-826daad173f5",
+      "name": "保存明细JSON"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ script: '60103飞书/write_from_template.py', args: ['--detail', $('整理待写数据').first().json.detailPath, '--out', $('整理待写数据').first().json.outPath], timeout: 900 }) }}",
+        "options": {
+          "timeout": 920000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        420
+      ],
+      "id": "9d73e231-03aa-4cd2-9df6-d652d7b75b01",
+      "name": "生成计算表"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\nconst out = (r.stdout || '').trim();\nconst err = (r.stderr || '').trim();\nif (r.code !== 0) throw new Error('写表失败：' + err.split('\\n').slice(-6).join(' | '));\nconst line = out.split('\\n').find(l => l.startsWith('RESULT '));\nconst res = line ? JSON.parse(line.slice(7)) : {};\nreturn [{ json: { ok: Boolean(res.ok), out: res.out, rows: res.rows, orders: res.orders,\n  images: (out.match(/商品图：([^\\n]*)/) || [])[1] || '', log: out.split('\\n').slice(-4) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        420
+      ],
+      "id": "25ebe908-8e0a-4538-b23b-04c297c64d73",
+      "name": "解析出表结果"
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "查询商品配置表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "循环请求某个时间范围内的所有订单数据",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "定义时间": {
+      "main": [
+        [
+          {
+            "node": "解析时间参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析时间参数": {
+      "main": [
+        [
+          {
+            "node": "循环请求某个时间范围内的所有订单数据",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "循环请求某个时间范围内的所有订单数据": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "请求订单接口数据500条1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "解析出需要的数据",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "请求订单接口数据500条1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "SearchRecords base2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CreateRecord base": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SearchRecords base2": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "CreateRecord base",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析出需要的数据": {
+      "main": [
+        [
+          {
+            "node": "提取澳洲邮编",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查询商品配置表": {
+      "main": [
+        [
+          {
+            "node": "获取所有字段名",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取所有字段名": {
+      "main": [
+        [
+          {
+            "node": "解析整个商品配置表生成对象数组",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析整个商品配置表生成对象数组": {
+      "main": [
+        [
+          {
+            "node": "查询物流运费表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "匹配商品配置": {
+      "main": [
+        [
+          {
+            "node": "有缺失？",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "有缺失？": {
+      "main": [
+        [
+          {
+            "node": "发送飞书群消息",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "整理待写数据",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "发送飞书群消息": {
+      "main": [
+        [
+          {
+            "node": "全部匹配",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查询物流运费表": {
+      "main": [
+        [
+          {
+            "node": "解析物流运费表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析物流运费表": {
+      "main": [
+        [
+          {
+            "node": "运价表索引",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "运价表索引": {
+      "main": [
+        [
+          {
+            "node": "查询国家配置表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "提取澳洲邮编": {
+      "main": [
+        [
+          {
+            "node": "查询澳大利亚分区表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查询澳大利亚分区表": {
+      "main": [
+        [
+          {
+            "node": "合并澳洲分区",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "合并澳洲分区": {
+      "main": [
+        [
+          {
+            "node": "匹配商品配置",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查询国家配置表": {
+      "main": [
+        [
+          {
+            "node": "解析国家配置表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析国家配置表": {
+      "main": [
+        [
+          {
+            "node": "查询全局参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查询全局参数": {
+      "main": [
+        [
+          {
+            "node": "解析全局参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析全局参数": {
+      "main": [
+        [
+          {
+            "node": "定义时间",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "整理待写数据": {
+      "main": [
+        [
+          {
+            "node": "保存明细JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "保存明细JSON": {
+      "main": [
+        [
+          {
+            "node": "生成计算表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "生成计算表": {
+      "main": [
+        [
+          {
+            "node": "解析出表结果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "1f3813c8-327f-4298-b913-9822a6bdd974",
+  "activeVersionId": null,
+  "versionCounter": 179,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-11-16T01:32:42.278Z",
+      "createdAt": "2026-11-16T01:32:42.278Z",
+      "role": "workflow:owner",
+      "workflowId": "UjY2p2gtIACSLDAL",
+      "projectId": "X1Hl08KPV0Zp1tHQ",
+      "project": {
+        "updatedAt": "2026-10-26T02:02:16.400Z",
+        "createdAt": "2026-10-26T01:45:51.871Z",
+        "id": "X1Hl08KPV0Zp1tHQ",
+        "name": "Feng Ming <mingfeng1026@proton.me>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "21992e0f-eaf9-4b0b-9538-ca2c3d839d39"
+      }
+    }
+  ],
+  "versionMetadata": null
+}

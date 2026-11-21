@@ -1,0 +1,174 @@
+{
+  "name": "60103 逐步匹配 → 缺失待补",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "f1000000-0000-4000-8000-000000000001",
+      "name": "手动触发",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-720, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "1", "name": "app_token", "value": "bascnXXXXXXXXXXXX", "type": "string"},
+            {"id": "2", "name": "tbl_pending", "value": "tbl_待补配置", "type": "string"},
+            {"id": "3", "name": "order", "value": "", "type": "string"},
+            {"id": "4", "name": "data_dir", "value": "/data/data/workflow003/60103飞书/data", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000002",
+      "name": "配置",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-500, 300],
+      "notes": "order 留空 = 取 /data/data/workflow003/input 下最新导出"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ script: '60103飞书/step_match.py', args: [\"--data-dir\", $('配置').item.json.data_dir, ...($('配置').item.json.order ? [\"--order\", $('配置').item.json.order] : [])], timeout: 600 }) }}",
+        "options": {"timeout": 620000}
+      },
+      "id": "f1000000-0000-4000-8000-000000000003",
+      "name": "① 逐步匹配",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-260, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\nconst out = (r.stdout || '').trim();\nconst err = (r.stderr || '').trim();\n\nif (r.code !== 0) {\n  throw new Error('匹配脚本失败：' + err.split('\\n').slice(-6).join(' | '));\n}\n\nconst line = out.split('\\n').find(l => l.startsWith('RESULT '));\nif (!line) throw new Error('脚本没有输出 RESULT，原始输出：' + out.slice(-400));\nconst res = JSON.parse(line.slice(7));\n\nreturn [{\n  json: {\n    ok: res.ok,\n    order: res.order,\n    orders: res.orders,\n    rows: res.rows,\n    steps: res.steps,\n    missing: [...(res.missing_sku || []), ...(res.missing_rate || [])]\n  }\n}];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000004",
+      "name": "② 解析结果",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-20, 300]
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "searchRecords",
+        "app_token": {"__rl": true, "mode": "id", "value": "={{ $('配置').item.json.app_token }}"},
+        "table_id": {"__rl": true, "mode": "id", "value": "={{ $('配置').item.json.tbl_pending }}"},
+        "whether_paging": false,
+        "body": "{\"field_names\":[\"标识\",\"状态\"]}",
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000005",
+      "name": "③ 读待补表已有",
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "notes": "只取「标识 / 状态」两个字段，用来去重"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 已有待补（未处理的）标识集合\nconst existing = new Set();\ntry {\n  const it = $('③ 读待补表已有').first().json;\n  for (const rec of (it.items || [])) {\n    const f = rec.fields || {};\n    const key = Array.isArray(f['标识']) ? f['标识'][0]?.text : f['标识'];\n    const st = Array.isArray(f['状态']) ? f['状态'][0]?.name ?? f['状态'][0] : f['状态'];\n    if (key) existing.add(String(key).trim());\n  }\n} catch (e) {}\n\nconst base = $('② 解析结果').first().json;\nconst todo = (base.missing || []).filter(m => !existing.has(String(m['标识']).trim()));\n\nreturn [{\n  json: {\n    newCount: todo.length,\n    totalMissing: (base.missing || []).length,\n    skipped: (base.missing || []).length - todo.length,\n    records: todo.map(m => ({\n      fields: {\n        '类型': m['类型'],\n        '标识': m['标识'],\n        '建议前缀': m['建议前缀'] || '',\n        '订单数': m['订单数'] ?? 0,\n        '行数': m['行数'] ?? 0,\n        '样例交易编号': m['样例交易编号'] || '',\n        'SKU样例': m['SKU样例'] || '',\n        '说明': m['说明'] || '',\n        '状态': '待处理'\n      }\n    })),\n    steps: base.steps,\n    order: base.order\n  }\n}];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000006",
+      "name": "④ 过滤出新增",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.newCount }}",
+              "rightValue": 0,
+              "operator": {"type": "number", "operation": "gt"}
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000007",
+      "name": "⑤ 有新增？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "resource": "base",
+        "operation": "batchCreateRecords",
+        "app_token": {"__rl": true, "mode": "id", "value": "={{ $('配置').item.json.app_token }}"},
+        "table_id": {"__rl": true, "mode": "id", "value": "={{ $('配置').item.json.tbl_pending }}"},
+        "body": "={{ JSON.stringify({ records: $('④ 过滤出新增').first().json.records }) }}",
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000008",
+      "name": "⑥ 写入待补表",
+      "type": "n8n-nodes-feishu-lark.lark",
+      "typeVersion": 1,
+      "position": [940, 200],
+      "notes": "一次最多 500 条；body = {records:[{fields:{...}}]}"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('④ 过滤出新增').first().json;\nreturn [{\n  json: {\n    ok: true,\n    order: p.order,\n    steps: p.steps,\n    totalMissing: p.totalMissing,\n    newWritten: p.newCount,\n    skipped: p.skipped,\n    message: p.newCount\n      ? `新增 ${p.newCount} 条待补（已跳过 ${p.skipped} 条重复）`\n      : `本轮没有新的待补项（已有 ${p.totalMissing} 条待补仍在表里）`\n  }\n}];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000009",
+      "name": "⑦ 已完成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('④ 过滤出新增').first().json;\nreturn [{\n  json: {\n    ok: true,\n    order: p.order,\n    steps: p.steps,\n    totalMissing: 0,\n    newWritten: 0,\n    skipped: 0,\n    message: '全部匹配成功，无需补填'\n  }\n}];"
+      },
+      "id": "f1000000-0000-4000-8000-00000000000a",
+      "name": "⑦ 无缺失",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 420]
+    },
+    {
+      "parameters": {
+        "content": "## 逐步匹配 → 缺失待补\n\n```\n手动触发 → 配置 → ① 逐步匹配(runner) → ② 解析结果\n   → ③ 读待补表已有 → ④ 过滤出新增 → ⑤ 有新增？\n        ├─ 有 → ⑥ 写入待补表(Lark) → ⑦ 已完成\n        └─ 无 → ⑦ 无缺失\n```\n\n### ① 每一步都单独统计\n- 步骤1 国家改写（美国偏远 / 澳洲分区）\n- 步骤2 SKU 前缀匹配 → 没匹配到 → **待补商品配置**\n- 步骤3 运价段匹配 → 没匹配到 → **待补运价**\n\n### 待补表「待补配置」要建的字段\n| 字段 | 类型 |\n|---|---|\n| 类型 | 单选：SKU / 运价 |\n| 标识 | 文本（SKU 前缀 或 国家\\|重量kg） |\n| 建议前缀 | 文本 |\n| 订单数 | 数字 |\n| 行数 | 数字 |\n| 样例交易编号 | 文本 |\n| SKU样例 | 文本 |\n| 说明 | 文本 |\n| 状态 | 单选：待处理 / 已处理 |\n\n### 去重逻辑\n先拉待补表的「标识」，已存在的不重复写；业务补完把「状态」改成已处理，下一轮只汇总新的。\n\n### 业务怎么补\n打开待补表 → 看「说明」和「建议前缀」→ 去「商品配置」表加一行 → 把待补记录状态改成已处理。",
+        "height": 560,
+        "width": 600,
+        "color": 4
+      },
+      "id": "f1000000-0000-4000-8000-00000000000b",
+      "name": "说明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-740, 620]
+    }
+  ],
+  "connections": {
+    "手动触发": {"main": [[{"node": "配置", "type": "main", "index": 0}]]},
+    "配置": {"main": [[{"node": "① 逐步匹配", "type": "main", "index": 0}]]},
+    "① 逐步匹配": {"main": [[{"node": "② 解析结果", "type": "main", "index": 0}]]},
+    "② 解析结果": {"main": [[{"node": "③ 读待补表已有", "type": "main", "index": 0}]]},
+    "③ 读待补表已有": {"main": [[{"node": "④ 过滤出新增", "type": "main", "index": 0}]]},
+    "④ 过滤出新增": {"main": [[{"node": "⑤ 有新增？", "type": "main", "index": 0}]]},
+    "⑤ 有新增？": {"main": [
+      [{"node": "⑥ 写入待补表", "type": "main", "index": 0}],
+      [{"node": "⑦ 无缺失", "type": "main", "index": 0}]
+    ]},
+    "⑥ 写入待补表": {"main": [[{"node": "⑦ 已完成", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "pinData": {},
+  "versionId": "1",
+  "meta": {"instanceId": "60103-step-match"},
+  "tags": []
+}

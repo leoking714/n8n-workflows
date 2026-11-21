@@ -1,0 +1,10 @@
+{
+ "app_id": "cli_aa62fc8e297a9bf6",
+ "app_secret": "***REDACTED***",
+ "base": "RvrMbDYgJaZ8mts6vPOcoCb8nMb",
+ "tables": {
+  "商品": "tbl7LdhmVqh70kZn",
+  "运价": "tblHoCR6bRPAAwsI",
+  "国家": "tblnP5e6VWdU1j1T"
+ }
+}

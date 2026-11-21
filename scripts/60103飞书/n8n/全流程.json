@@ -1,0 +1,117 @@
+{
+  "name": "60103 全流程（飞书配置 → 计算表）",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "d1000000-0000-4000-8000-000000000001",
+      "name": "手动触发",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-640, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "1", "name": "app_id", "value": "cli_xxxxxxxxxxxxxxxx", "type": "string"},
+            {"id": "2", "name": "app_secret", "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "type": "string"},
+            {"id": "3", "name": "app_token", "value": "bascnXXXXXXXXXXXX", "type": "string"},
+            {"id": "4", "name": "order", "value": "", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "d1000000-0000-4000-8000-000000000002",
+      "name": "配置",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-420, 300],
+      "notes": "order 留空 = 自动取 /data/data/workflow003/input 下最新导出"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ script: '60103飞书/sync_config.py', args: ['--app-id', $('配置').item.json.app_id, '--app-secret', $('配置').item.json.app_secret, '--app-token', $('配置').item.json.app_token], timeout: 600 }) }}",
+        "options": {"timeout": 620000}
+      },
+      "id": "d1000000-0000-4000-8000-000000000003",
+      "name": "① 同步飞书配置",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-180, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\nconst out = (r.stdout || '').trim();\nconst err = (r.stderr || '').trim();\n\nconst counts = {};\nfor (const line of out.split('\\n')) {\n  const m = line.match(/^\\s*(\\S+)\\s+(\\d+)\\s+行\\s*$/);\n  if (m) counts[m[1]] = Number(m[2]);\n}\n\nif (r.code !== 0) {\n  throw new Error('同步配置失败：' + (err.split('\\n').slice(-4).join(' | ') || out));\n}\n\nreturn [{\n  json: {\n    ok: true,\n    counts,\n    stdout: out\n  }\n}];"
+      },
+      "id": "d1000000-0000-4000-8000-000000000004",
+      "name": "② 配置体检",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ script: '60103飞书/generate.py', args: ($('配置').item.json.order ? [$('配置').item.json.order] : []), timeout: 900 }) }}",
+        "options": {"timeout": 920000}
+      },
+      "id": "d1000000-0000-4000-8000-000000000005",
+      "name": "③ 生成计算表",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\nconst out = (r.stdout || '').trim();\nconst err = (r.stderr || '').trim();\n\nif (r.code !== 0) {\n  throw new Error('生成计算表失败：' + (err.split('\\n').slice(-6).join(' | ')));\n}\n\nconst line = out.split('\\n').find(l => l.startsWith('RESULT '));\nconst result = line ? JSON.parse(line.slice(7)) : { ok: false };\n\nreturn [{\n  json: {\n    ...result,\n    ok: Boolean(result.ok),\n    summary: out.split('\\n').filter(l => l.includes('汇总') || l.includes('明细')).join(' / '),\n    log: out\n  }\n}];"
+      },
+      "id": "d1000000-0000-4000-8000-000000000006",
+      "name": "④ 解析结果",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 300]
+    },
+    {
+      "parameters": {},
+      "id": "d1000000-0000-4000-8000-000000000007",
+      "name": "结束",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "content": "## 60103 全流程\n\n```\n手动触发 → 配置 → ① 同步飞书配置 → ② 配置体检 → ③ 生成计算表 → ④ 解析结果\n```\n\n### 运行环境\n计算在 **python-runner** 容器里跑（n8n 容器没有 python）：\n`http://python-runner:8000/run`\n\n### 代码位置\n- 代码：`/scripts/60103飞书`（只读挂载）\n- 数据/输出：`/data/data/workflow003/60103飞书`（可写）\n\n### 配置节点填 4 项\n- app_id / app_secret：飞书开放平台「凭证与基础信息」\n- app_token：多维表格地址 `/base/` 后面的 `bascn...`\n- order：订单 xlsx 路径，**留空**则自动取 `/data/data/workflow003/input` 下最新导出\n\n### 期望输出（④ 解析结果）\n```\n{\n  \"ok\": true,\n  \"orders\": 248,\n  \"rows\": 351,\n  \"issues\": 43,\n  \"bill_total\": 3073.1,\n  \"out\": \"/data/data/workflow003/60103飞书/输出/60103计算表_xxxx.xlsx\"\n}\n```\n\n### 报错对照\n- `同步配置失败` → 看 ② 节点的报错，通常是表名/协作者/权限\n- `生成计算表失败` → 常见是订单目录为空，或配置 JSON 没生成\n- `python-runner:8000` 连不上 → 检查 runner 容器是否在跑",
+        "height": 560,
+        "width": 560,
+        "color": 6
+      },
+      "id": "d1000000-0000-4000-8000-000000000008",
+      "name": "说明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-660, 560]
+    }
+  ],
+  "connections": {
+    "手动触发": {"main": [[{"node": "配置", "type": "main", "index": 0}]]},
+    "配置": {"main": [[{"node": "① 同步飞书配置", "type": "main", "index": 0}]]},
+    "① 同步飞书配置": {"main": [[{"node": "② 配置体检", "type": "main", "index": 0}]]},
+    "② 配置体检": {"main": [[{"node": "③ 生成计算表", "type": "main", "index": 0}]]},
+    "③ 生成计算表": {"main": [[{"node": "④ 解析结果", "type": "main", "index": 0}]]},
+    "④ 解析结果": {"main": [[{"node": "结束", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "pinData": {},
+  "versionId": "1",
+  "meta": {"instanceId": "60103-feishu-full"},
+  "tags": []
+}

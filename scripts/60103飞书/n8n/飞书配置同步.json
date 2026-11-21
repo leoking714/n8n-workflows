@@ -1,0 +1,101 @@
+{
+  "name": "60103 飞书配置同步",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "手动触发",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-200, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "1", "name": "workdir", "value": "/data/data/workflow003/feishu", "type": "string"},
+            {"id": "2", "name": "app_id", "value": "cli_xxxxxxxxxxxxxxxx", "type": "string"},
+            {"id": "3", "name": "app_secret", "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "type": "string"},
+            {"id": "4", "name": "app_token", "value": "bascnXXXXXXXXXXXX", "type": "string"},
+            {"id": "5", "name": "python", "value": "python3", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "配置",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd {{$json.workdir}} && FEISHU_APP_ID='{{$json.app_id}}' FEISHU_APP_SECRET='{{$json.app_secret}}' FEISHU_APP_TOKEN='{{$json.app_token}}' {{$json.python}} sync_config.py",
+        "executeOnce": true
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "拉取飞书配置",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 把 sync_config.py 的控制台输出整理成结构化结果\nconst out = ($json.stdout || '').trim();\nconst err = ($json.stderr || '').trim();\n\n// 解析 \"商品配置    30 行\" 这种行\nconst counts = {};\nfor (const line of out.split('\\n')) {\n  const m = line.match(/^\\s*(\\S+)\\s+(\\d+)\\s+行\\s*$/);\n  if (m) counts[m[1]] = Number(m[2]);\n}\n\nconst ok = !err && Object.keys(counts).length > 0;\nreturn [{\n  json: {\n    ok,\n    counts,\n    stdout: out,\n    stderr: err\n  }\n}];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "解析结果",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd {{$('配置').item.json.workdir}} && {{$('配置').item.json.python}} generate.py",
+        "executeOnce": true
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "生成计算表（待接入）",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [660, 300],
+      "disabled": true,
+      "notes": "generate.py 还没写（新工程第二阶段）；写好后把 disabled 打开"
+    },
+    {
+      "parameters": {},
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "结束",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "content": "## 使用说明\n\n1. 把 `60103飞书` 整个目录拷到 n8n 能访问的位置（默认 `/data/data/workflow003/feishu`）\n2. 在「配置」节点填：app_id / app_secret / app_token\n3. 先跑一次「拉取飞书配置」，看「解析结果」里的 counts 是否正确\n\n### 期望行数\n- 商品配置 ~30\n- 运价表 ~73\n- 澳洲分区 ~9091\n- 全局参数 11\n- 国家规则 ~49\n\n### 报错对照\n- `缺少 FEISHU_APP_TOKEN` → 多维表格地址 /base/ 后面那串\n- `找不到这些数据表` → 表名不一致，或用环境变量指定 table_id\n- `一条记录都没有` → 应用没被加成协作者\n- `HTTP 403` → 应用权限没开 bitable:app",
+        "height": 420,
+        "width": 520,
+        "color": 4
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "说明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-220, 560]
+    }
+  ],
+  "connections": {
+    "手动触发": {"main": [[{"node": "配置", "type": "main", "index": 0}]]},
+    "配置": {"main": [[{"node": "拉取飞书配置", "type": "main", "index": 0}]]},
+    "拉取飞书配置": {"main": [[{"node": "解析结果", "type": "main", "index": 0}]]},
+    "解析结果": {"main": [[{"node": "生成计算表（待接入）", "type": "main", "index": 0}]]},
+    "生成计算表（待接入）": {"main": [[{"node": "结束", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "pinData": {},
+  "versionId": "1",
+  "meta": {"instanceId": "60103-feishu-sync"},
+  "tags": []
+}
