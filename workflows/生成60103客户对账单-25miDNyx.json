@@ -1,0 +1,901 @@
+{
+ "updatedAt": "2026-11-13T06:49:38.448Z",
+ "createdAt": "2026-11-07T01:44:50.573Z",
+ "id": "25miDNyxywfq2b3n",
+ "name": "生成60103客户对账单",
+ "description": null,
+ "active": true,
+ "isArchived": false,
+ "nodes": [
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "007910d4-6315-4816-89f6-c20b0316c69c",
+       "leftValue": "={{ $json.code }}",
+       "rightValue": 200,
+       "operator": {
+        "type": "number",
+        "operation": "equals"
+       }
+      },
+      {
+       "id": "90767c81-5e2f-4048-810c-311058a8bfc3",
+       "leftValue": "={{ $json.message }}",
+       "rightValue": "success",
+       "operator": {
+        "type": "string",
+        "operation": "equals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    224,
+    240
+   ],
+   "id": "58a1c4fb-7fcb-4ed0-b2f0-261db56bbd84",
+   "name": "If"
+  },
+  {
+   "parameters": {
+    "jsCode": "const arr = $input.all().flatMap(item=>{\n  return item.json.orderItem.map(order=>{\n    return {\n      \"交易编号\": item.json.salesRecordNumber,\n      \"订单编号\": item.json.platformOrderId,\n      \"原始图片\": order.originalPictureUrl,\n      \"商品数量\": order.quantity,\n      \"国家中文\": item.json.countryNameCN,\n      \"国家二字码\": item.json.countryCode,\n      \"SKU\": order.stockSku,\n      \"商品成本\": order.costPrice,\n      \"物流公司\": item.json.myLogisticsName,\n      \"物流渠道\": item.json.myLogisticsChannelName,\n      \"内部单号\": item.json.trackNumber1,\n      \"实际运费\": item.json.shippingCost,\n      \"订单备注\": item.json.remark,\n      \"邮政编码\": item.json.postCode\n    }\n  })\n})\n\nconsole.log(arr)\n\n// return $input.first().json.data.data\nreturn arr"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    224,
+    32
+   ],
+   "id": "fcc17efb-4302-45ce-9d15-12384494345f",
+   "name": "解析出需要的数据"
+  },
+  {
+   "parameters": {
+    "operation": "xlsx",
+    "options": {
+     "sheetName": "商品信息"
+    }
+   },
+   "type": "n8n-nodes-base.convertToFile",
+   "typeVersion": 1.1,
+   "position": [
+    1008,
+    -400
+   ],
+   "id": "da7e86d8-3f70-450a-9523-6274588aeb4e",
+   "name": "转为xlsx文件"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://host.docker.internal:8000/api/erp-proxy",
+    "sendBody": true,
+    "contentType": "raw",
+    "rawContentType": "application/json",
+    "body": "={   \"api\": \"order-get-order-list-new\",   \"data\": {     \"createDateStart\": \"{{ $json.api_start_time }}\",     \"createDateEnd\": \"{{ $json.api_end_time }}\",     \"maxRows\": \"500\",     \"cursor\": \"\", \t\n\"shopName\":[\"60103Thecandiceshop\"]   } }",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    48,
+    240
+   ],
+   "id": "b7266222-93d4-4dfd-8563-d3b8849b8768",
+   "name": "请求订单接口数据500条"
+  },
+  {
+   "parameters": {
+    "jsCode": "return {\"startDate\": $input.first().json['订单创建开始日期'], \"endDate\": $input.first().json['订单创建结束日期']}"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -544,
+    128
+   ],
+   "id": "430e2f39-8d90-4e28-96f0-fdff7aa0ca35",
+   "name": "定义时间"
+  },
+  {
+   "parameters": {
+    "jsCode": "const startRaw = $input.first().json.startDate;\nconst endRaw = $input.first().json.endDate;\n\nconst pad2 = (n) => String(n).padStart(2, '0');\n\nfunction parseDateTime(str) {\n  // 兼容 2026-5-4、2026/5/4、2026-5-4 9:5:3、2026-05-04 09:05:03 等\n  const m = String(str).trim().match(\n    /^(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})(?:[ T](\\d{1,2}):(\\d{1,2})(?::(\\d{1,2}))?)?/\n  );\n\n  if (!m) {\n    throw new Error(`无法解析日期时间: ${str}`);\n  }\n\n  const year = Number(m[1]);\n  const month = Number(m[2]);\n  const day = Number(m[3]);\n  const hour = m[4] !== undefined ? Number(m[4]) : 0;\n  const minute = m[5] !== undefined ? Number(m[5]) : 0;\n  const second = m[6] !== undefined ? Number(m[6]) : 0;\n\n  const dateStr = `${year}-${pad2(month)}-${pad2(day)}`;\n  const dateTimeStr = `${dateStr} ${pad2(hour)}:${pad2(minute)}:${pad2(second)}`;\n\n  return {\n    year,\n    month,\n    day,\n    hour,\n    minute,\n    second,\n    dateStr,\n    dateTimeStr\n  };\n}\n\nconst start = parseDateTime(startRaw);\nconst end = parseDateTime(endRaw);\n\n// 使用 UTC 日期，避免时区导致日期错乱\nlet current = new Date(Date.UTC(start.year, start.month - 1, start.day));\nconst endDate = new Date(Date.UTC(end.year, end.month - 1, end.day));\n\nconst dateItems = [];\n\nwhile (current <= endDate) {\n  const currentDayStr = [\n    current.getUTCFullYear(),\n    pad2(current.getUTCMonth() + 1),\n    pad2(current.getUTCDate())\n  ].join('-');\n\n  let dayStart;\n  if (currentDayStr === start.dateStr) {\n    // 第一天：使用传入的开始时间，统一补零格式化\n    dayStart = start.dateTimeStr;\n  } else {\n    dayStart = `${currentDayStr} 00:00:00`;\n  }\n\n  let dayEnd;\n  if (currentDayStr === end.dateStr) {\n    // 最后一天：使用传入的结束时间，统一补零格式化\n    dayEnd = end.dateTimeStr;\n  } else {\n    dayEnd = `${currentDayStr} 23:59:59`;\n  }\n\n  dateItems.push({\n    json: {\n      api_start_time: dayStart,\n      api_end_time: dayEnd\n    }\n  });\n\n  current.setUTCDate(current.getUTCDate() + 1);\n}\n\nreturn dateItems;"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -368,
+    128
+   ],
+   "id": "a5373bf4-0151-466c-8db8-cf95881254d4",
+   "name": "解析时间参数"
+  },
+  {
+   "parameters": {
+    "options": {}
+   },
+   "type": "n8n-nodes-base.splitInBatches",
+   "typeVersion": 3,
+   "position": [
+    -176,
+    128
+   ],
+   "id": "7d6f72cb-bcd1-4748-912c-f023527863fc",
+   "name": "循环请求某个时间范围内的所有订单数据"
+  },
+  {
+   "parameters": {
+    "jsCode": "const arr = $input.all().map(item=>{\n  console.log(item.json.data.data)\n  return item.json.data.data\n}).flat(Infinity)\n\n// console.log(arr)\n\nreturn arr"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    48,
+    32
+   ],
+   "id": "54eb436b-7f3e-48c9-b438-201d69ccde11",
+   "name": "Code in JavaScript1"
+  },
+  {
+   "parameters": {
+    "formTitle": "上传生成计算结果表需要的文件",
+    "formFields": {
+     "values": [
+      {
+       "fieldLabel": "订单创建开始日期",
+       "placeholder": "填写开始日期（例：2026-11-01 18:12:12）",
+       "defaultValue": "={{ $now.format('yyyy-MM-dd 00:00:00') }}",
+       "requiredField": true
+      },
+      {
+       "fieldLabel": "订单创建结束日期",
+       "placeholder": "填写结束日期（例：2026-11-02 18:12:12）",
+       "defaultValue": "={{ $now.format('yyyy-MM-dd hh:mm:ss') }}",
+       "requiredField": true
+      },
+      {
+       "fieldLabel": "商品配置表",
+       "fieldType": "file",
+       "fieldName": "product_config_table",
+       "acceptFileTypes": ".xlsx"
+      },
+      {
+       "fieldLabel": "运价表",
+       "fieldType": "file",
+       "fieldName": "shipping_rate",
+       "acceptFileTypes": ".xlsx"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.formTrigger",
+   "typeVersion": 2.6,
+   "position": [
+    -1072,
+    -512
+   ],
+   "id": "aa5da9b1-bbcf-4bf9-9c8a-a10e865535d2",
+   "name": "On form submission",
+   "webhookId": "aac81de6-c8cd-4969-a203-df3a95b21905"
+  },
+  {
+   "parameters": {
+    "command": "=mv /data/data/workflow003/config/商品配置表.xlsx /data/data/workflow003/config/商品配置表{{ $now.format('yyyyMMddhhmmss') }}.xlsx"
+   },
+   "type": "n8n-nodes-base.executeCommand",
+   "typeVersion": 1,
+   "position": [
+    -512,
+    -736
+   ],
+   "id": "07a639ad-f53b-4e10-bf29-b5a5bf0fe338",
+   "name": "Execute Command"
+  },
+  {
+   "parameters": {
+    "command": "=mv /data/data/workflow003/config/物流运费表.xlsx /data/data/workflow003/config/物流运费表{{ $now.format('yyyyMMddhhmmss') }}.xlsx"
+   },
+   "type": "n8n-nodes-base.executeCommand",
+   "typeVersion": 1,
+   "position": [
+    -512,
+    -288
+   ],
+   "id": "2c965ac3-cd59-4343-8d78-d556493c48d2",
+   "name": "Execute Command1"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "b5cbaf9a-e7a1-4496-98bf-f199bd44b184",
+       "leftValue": "={{ $json.product_config_table }}",
+       "rightValue": "",
+       "operator": {
+        "type": "array",
+        "operation": "notExists",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    -736,
+    -672
+   ],
+   "id": "c925dbe3-32d4-45dc-b59e-d057d251f180",
+   "name": "判断商品配置表是否上传"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "b5cbaf9a-e7a1-4496-98bf-f199bd44b184",
+       "leftValue": "={{ $json.shipping_rate }}",
+       "rightValue": "",
+       "operator": {
+        "type": "array",
+        "operation": "notExists",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    -736,
+    -352
+   ],
+   "id": "9c3b1d09-894e-4e1c-b395-eb92dfad3267",
+   "name": "判断运价表是否上传"
+  },
+  {
+   "parameters": {
+    "operation": "write",
+    "fileName": "/data/data/workflow003/config/商品配置表.xlsx",
+    "dataPropertyName": "product_config_table",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.readWriteFile",
+   "typeVersion": 1.1,
+   "position": [
+    -512,
+    -576
+   ],
+   "id": "36745aec-e5ea-4c57-aaf7-9ec35335d9c9",
+   "name": "Read/Write Files from Disk1"
+  },
+  {
+   "parameters": {
+    "operation": "write",
+    "fileName": "/data/data/workflow003/config/物流运费表.xlsx",
+    "dataPropertyName": "shipping_rate",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.readWriteFile",
+   "typeVersion": 1.1,
+   "position": [
+    -512,
+    -128
+   ],
+   "id": "cd0944d2-e3bd-40d5-b185-de37e8bad45c",
+   "name": "Read/Write Files from Disk2"
+  },
+  {
+   "parameters": {
+    "jsCode": "return [{ json: { _kind: 'branch', branch: 'product', ok: false } }];"
+   },
+   "id": "4b82a22c-5b12-4e1d-88f5-6a65985a4b77",
+   "name": "商品标记-跳过",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -512,
+    -912
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "return [{ json: { _kind: 'branch', branch: 'product', ok: true } }];"
+   },
+   "id": "06b13141-0f83-4e53-a3c9-8e91b9b15277",
+   "name": "商品标记-完成",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -80,
+    -528
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "return [{ json: { _kind: 'branch', branch: 'shipping', ok: false } }];"
+   },
+   "id": "43aa0d84-9ff6-4753-a28b-6a65a8a22a04",
+   "name": "运价标记-跳过",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -512,
+    -432
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "return [{ json: { _kind: 'branch', branch: 'shipping', ok: true } }];"
+   },
+   "id": "a663d3f6-5f43-4dc3-ab94-2581e6ade06f",
+   "name": "运价标记-完成",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -80,
+    -144
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "return $input.all().map(item => ({ json: { ...item.json, _kind: 'order' } }));"
+   },
+   "id": "57e28230-3b85-4771-b63f-90d63e88ea52",
+   "name": "订单标记",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    464,
+    -208
+   ]
+  },
+  {
+   "parameters": {
+    "numberInputs": 3
+   },
+   "id": "25022ec4-f682-43fc-aaf1-83dd1c681e79",
+   "name": "等待三分支",
+   "type": "n8n-nodes-base.merge",
+   "typeVersion": 3,
+   "position": [
+    656,
+    -400
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "return $input.all()\n  .filter(item => item.json._kind === 'order')\n  .map(item => ({ json: item.json }));"
+   },
+   "id": "54467351-20eb-423f-a061-4a22c97eee4c",
+   "name": "过滤订单",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    832,
+    -400
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://open.feishu.cn/open-apis/bot/v2/hook/7697598c-2e86-407b-a011-f74b93fd9364",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"msg_type\": \"post\",\n  \"content\": {\n    \"post\": {\n      \"zh_cn\": {\n        \"title\": \"客户账单结果生成流程运行结果\",\n        \"content\": [\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"任务执行结果：\"\n            }\n          ],\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"状态: \"\n            },\n            {\n              \"tag\": \"text\",\n              \"text\": \"{{ $json.ok ? '✅ 成功' : '❌ 失败' }}\"\n            }\n          ],\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"输出的结果文件路径：{{ $json.path.replace(/^\\/data/, \"/Users/zuo/n8n/files\") }}\"\n            }\n          ]\n        ]\n      }\n    }\n  }\n}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    1936,
+    -496
+   ],
+   "id": "6599aaa6-2720-46c6-8fdb-b79a761b99ea",
+   "name": "将流程运行成功信息发送飞书群聊"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://open.feishu.cn/open-apis/bot/v2/hook/7697598c-2e86-407b-a011-f74b93fd9364",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"msg_type\": \"post\",\n  \"content\": {\n    \"post\": {\n      \"zh_cn\": {\n        \"title\": \"客户账单结果生成流程运行结果\",\n        \"content\": [\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"任务执行结果：\"\n            }\n          ],\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"状态: \"\n            },\n            {\n              \"tag\": \"text\",\n              \"text\": \"{{ $json.ok ? '✅ 成功' : '❌ 失败' }}\"\n            }\n          ],\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"失败原因：{{ $json.error }}\"\n            }\n          ]\n        ]\n      }\n    }\n  }\n}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    1936,
+    -336
+   ],
+   "id": "0e098dd2-e934-4f3a-be7c-fa3cfd431e28",
+   "name": "将流程运行失败原因发送飞书群聊"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "96b38a15-ecab-4355-bd78-645c6f21204b",
+       "leftValue": "={{ $json.ok }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "equals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    1712,
+    -400
+   ],
+   "id": "a0ab9690-1ff3-4680-9f23-7330bb049e7f",
+   "name": "判断流程是否成功执行"
+  },
+  {
+   "parameters": {
+    "jsCode": "return JSON.parse($input.first().json.stdout)"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1552,
+    -400
+   ],
+   "id": "cd1cb751-7527-4a6f-b3ca-9a8805fd3d76",
+   "name": "解析python返回的数据"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://python-runner:8000/run",
+    "sendBody": true,
+    "bodyParameters": {
+     "parameters": [
+      {
+       "name": "script",
+       "value": "workflow003/generate_table.py"
+      },
+      {
+       "name": "args",
+       "value": "={{ [\"--in\", $json.fileName] }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    1376,
+    -400
+   ],
+   "id": "dde795b4-a398-454f-8809-2371ad0f49d7",
+   "name": "使用python处理账单信息"
+  },
+  {
+   "parameters": {
+    "operation": "write",
+    "fileName": "=/data/data/workflow003/input/订单导出数据_{{ $now.format('yyyyMMddhhmmss') }}.xlsx",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.readWriteFile",
+   "typeVersion": 1.1,
+   "position": [
+    1184,
+    -400
+   ],
+   "id": "39148ef5-4ae4-430d-970b-08182efbc993",
+   "name": "将导出的订单数据写入到磁盘中"
+  }
+ ],
+ "connections": {
+  "If": {
+   "main": [
+    [
+     {
+      "node": "循环请求某个时间范围内的所有订单数据",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "解析出需要的数据": {
+   "main": [
+    [
+     {
+      "node": "订单标记",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "转为xlsx文件": {
+   "main": [
+    [
+     {
+      "node": "将导出的订单数据写入到磁盘中",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "请求订单接口数据500条": {
+   "main": [
+    [
+     {
+      "node": "If",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "定义时间": {
+   "main": [
+    [
+     {
+      "node": "解析时间参数",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "解析时间参数": {
+   "main": [
+    [
+     {
+      "node": "循环请求某个时间范围内的所有订单数据",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "循环请求某个时间范围内的所有订单数据": {
+   "main": [
+    [
+     {
+      "node": "Code in JavaScript1",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "请求订单接口数据500条",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Code in JavaScript1": {
+   "main": [
+    [
+     {
+      "node": "解析出需要的数据",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "On form submission": {
+   "main": [
+    [
+     {
+      "node": "判断商品配置表是否上传",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "判断运价表是否上传",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "定义时间",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "判断商品配置表是否上传": {
+   "main": [
+    [
+     {
+      "node": "商品标记-跳过",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Execute Command",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Read/Write Files from Disk1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "判断运价表是否上传": {
+   "main": [
+    [
+     {
+      "node": "运价标记-跳过",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Execute Command1",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Read/Write Files from Disk2",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Execute Command": {
+   "main": [
+    []
+   ]
+  },
+  "Read/Write Files from Disk1": {
+   "main": [
+    [
+     {
+      "node": "商品标记-完成",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read/Write Files from Disk2": {
+   "main": [
+    [
+     {
+      "node": "运价标记-完成",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "商品标记-跳过": {
+   "main": [
+    [
+     {
+      "node": "等待三分支",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "商品标记-完成": {
+   "main": [
+    [
+     {
+      "node": "等待三分支",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "运价标记-跳过": {
+   "main": [
+    [
+     {
+      "node": "等待三分支",
+      "type": "main",
+      "index": 1
+     }
+    ]
+   ]
+  },
+  "运价标记-完成": {
+   "main": [
+    [
+     {
+      "node": "等待三分支",
+      "type": "main",
+      "index": 1
+     }
+    ]
+   ]
+  },
+  "订单标记": {
+   "main": [
+    [
+     {
+      "node": "等待三分支",
+      "type": "main",
+      "index": 2
+     }
+    ]
+   ]
+  },
+  "等待三分支": {
+   "main": [
+    [
+     {
+      "node": "过滤订单",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "过滤订单": {
+   "main": [
+    [
+     {
+      "node": "转为xlsx文件",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "判断流程是否成功执行": {
+   "main": [
+    [
+     {
+      "node": "将流程运行成功信息发送飞书群聊",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "将流程运行失败原因发送飞书群聊",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "解析python返回的数据": {
+   "main": [
+    [
+     {
+      "node": "判断流程是否成功执行",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "使用python处理账单信息": {
+   "main": [
+    [
+     {
+      "node": "解析python返回的数据",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "将导出的订单数据写入到磁盘中": {
+   "main": [
+    [
+     {
+      "node": "使用python处理账单信息",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "binaryMode": "separate",
+  "timeSavedMode": "fixed",
+  "errorWorkflow": "HREvfdugK9QQNmak",
+  "callerPolicy": "workflowsFromSameOwner",
+  "availableInMCP": false
+ },
+ "staticData": null,
+ "meta": {
+  "templateCredsSetupCompleted": true
+ },
+ "nodeGroups": [],
+ "pinData": {},
+ "versionId": "612e53c5-dda2-43d5-aa16-cfeb2be177c9",
+ "activeVersionId": "612e53c5-dda2-43d5-aa16-cfeb2be177c9",
+ "versionCounter": 132,
+ "triggerCount": 1,
+ "sourceWorkflowId": null,
+ "tags": [],
+ "shared": [
+  {
+   "updatedAt": "2026-11-07T01:44:50.573Z",
+   "createdAt": "2026-11-07T01:44:50.573Z",
+   "role": "workflow:owner",
+   "workflowId": "25miDNyxywfq2b3n",
+   "projectId": "X1Hl08KPV0Zp1tHQ",
+   "project": {
+    "updatedAt": "2026-10-26T02:02:16.400Z",
+    "createdAt": "2026-10-26T01:45:51.871Z",
+    "id": "X1Hl08KPV0Zp1tHQ",
+    "name": "Feng Ming <mingfeng1026@proton.me>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "21992e0f-eaf9-4b0b-9538-ca2c3d839d39"
+   }
+  }
+ ],
+ "versionMetadata": {
+  "name": "修改了定义时间的格式问题",
+  "description": ""
+ }
+}

@@ -1,0 +1,95 @@
+{
+ "updatedAt": "2026-11-11T04:01:17.307Z",
+ "createdAt": "2026-11-11T03:58:36.878Z",
+ "id": "p6xIfVmNnuxBOtEj",
+ "name": "飞书长链接测试",
+ "description": null,
+ "active": true,
+ "isArchived": false,
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "feishu-card-internal",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.2,
+   "position": [
+    -592,
+    -32
+   ],
+   "id": "3a403119-9b57-4eb5-90d9-fbf33efd6ec6",
+   "name": "Webhook",
+   "webhookId": "3560ece0-fc88-46bc-8648-2c4ae68cc3cb"
+  },
+  {
+   "parameters": {
+    "jsCode": "const d = $json;\nconst ev = d.event || d;\nconst v = ev.action?.value || {};\nconst op = ev.operator || {};\nconst ctx = ev.context || {};\n\nreturn [{ json: {\n  openId: op.open_id || '',\n  action: v.action || '',\n  orderId: v.orderId || '',\n  messageId: ctx.open_message_id || ''\n}}];"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -368,
+    -32
+   ],
+   "id": "40878f03-962c-4e4c-8b90-34ef406adbb8",
+   "name": "Code in JavaScript"
+  }
+ ],
+ "connections": {
+  "Webhook": {
+   "main": [
+    [
+     {
+      "node": "Code in JavaScript",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "binaryMode": "separate",
+  "timeSavedMode": "fixed",
+  "errorWorkflow": "HREvfdugK9QQNmak",
+  "callerPolicy": "workflowsFromSameOwner",
+  "availableInMCP": false
+ },
+ "staticData": null,
+ "meta": null,
+ "nodeGroups": [],
+ "pinData": {},
+ "versionId": "4350e1bb-6e68-4daa-9154-f04792d097db",
+ "activeVersionId": "4350e1bb-6e68-4daa-9154-f04792d097db",
+ "versionCounter": 10,
+ "triggerCount": 1,
+ "sourceWorkflowId": null,
+ "tags": [],
+ "shared": [
+  {
+   "updatedAt": "2026-11-11T03:58:36.878Z",
+   "createdAt": "2026-11-11T03:58:36.878Z",
+   "role": "workflow:owner",
+   "workflowId": "p6xIfVmNnuxBOtEj",
+   "projectId": "X1Hl08KPV0Zp1tHQ",
+   "project": {
+    "updatedAt": "2026-10-26T02:02:16.400Z",
+    "createdAt": "2026-10-26T01:45:51.871Z",
+    "id": "X1Hl08KPV0Zp1tHQ",
+    "name": "Feng Ming <mingfeng1026@proton.me>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "21992e0f-eaf9-4b0b-9538-ca2c3d839d39"
+   }
+  }
+ ],
+ "versionMetadata": {
+  "name": "测试版本",
+  "description": ""
+ }
+}

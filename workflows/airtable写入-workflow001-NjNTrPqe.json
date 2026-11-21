@@ -1,0 +1,990 @@
+{
+ "updatedAt": "2026-11-17T09:11:37.978Z",
+ "createdAt": "2026-10-28T06:49:23.369Z",
+ "id": "NjNTrPqe5p06Kd7W",
+ "name": "airtable写入-workflow001",
+ "description": null,
+ "active": true,
+ "isArchived": false,
+ "nodes": [
+  {
+   "parameters": {
+    "resource": "base",
+    "operation": "getSchema",
+    "base": {
+     "__rl": true,
+     "value": "https://airtable.com/appE0OdVa8Z7qG5M9/tblLxuimhdypLyvaf/viwl0kf9cEXn8o9yv?blocks=hide",
+     "mode": "url"
+    }
+   },
+   "type": "n8n-nodes-base.airtable",
+   "typeVersion": 2.2,
+   "position": [
+    96,
+    -656
+   ],
+   "id": "79823122-bc0a-49ef-b88e-1c6aac58fb71",
+   "name": "获取所有的在线表格",
+   "credentials": {
+    "airtableTokenApi": {
+     "id": "LOtNXRYp1NNLd5Wd",
+     "name": "actual_write"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "return $input.all().map(item=>{\n  return {\n    \"id\": item.json.id,\n    \"name\": item.json.name\n  }\n})"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    256,
+    -656
+   ],
+   "id": "79edc618-14ac-4914-bedd-1ca91a3426e0",
+   "name": "解析出需要的数据结构"
+  },
+  {
+   "parameters": {
+    "jsCode": "/**\n * 专门清洗第二个数组（源数据）的 name\n */\nfunction cleanSourceName(name) {\n  if (typeof name !== 'string') return '';\n  const hasChinese = /[\\u4e00-\\u9fa5]/.test(name);\n  if (hasChinese) {\n    return name.replace(/[^\\u4e00-\\u9fa5]/g, '');\n  } else {\n    let cleaned = name.toUpperCase();\n    cleaned = cleaned.replace(/\\bORDER\\b/g, '').replace(/\\bNEW\\b/g, '');\n    return cleaned.replace(/[^A-Z]/g, '');\n  }\n}\n\n/**\n * 主处理函数：多对一匹配（外层遍历门店，内层遍历源数据）\n */\nfunction matchMultiToOne(storeList, sourceList) {\n  const errors = [];\n\n  // 🚀 性能优化：预先清洗第二个数组，提取前5个字母，避免在双重循环中重复计算\n  const cleanedSources = sourceList.map(item => {\n    const cleaned = cleanSourceName(item.name);\n    const prefix5 = cleaned.length >= 3 ? cleaned.slice(0, 3) : cleaned;\n    return { ...item, _prefix5: prefix5 };\n  });\n\n  // 【关键修正】：外层遍历第一个数组（门店列表），确保每个门店都被检查\n  for (let i = 0; i < storeList.length; i++) {\n    const storeItem = storeList[i];\n    const rawStoreName = storeItem['Store Name'] || storeItem.storeName || '';\n    const upperStoreName = rawStoreName.toUpperCase();\n    \n    let isMatched = false;\n\n    // 内层遍历第二个数组（源数据），寻找当前门店的匹配项\n    for (let j = 0; j < cleanedSources.length; j++) {\n      const sourceItem = cleanedSources[j];\n      \n      if (!sourceItem._prefix5) continue;\n\n      // 匹配逻辑：门店的大写名称 包含 源数据的前5个字母\n      if (upperStoreName.includes(sourceItem._prefix5)) {\n        // 匹配成功！写入 id\n        storeItem.id = sourceItem.id;\n        isMatched = true;\n        break; // 找到匹配的源数据后跳出内层循环（因为源数据是唯一的）\n      }\n    }\n\n    // 如果遍历完所有源数据都没匹配上，记录报错\n    if (!isMatched) {\n      errors.push(`[匹配失败] 门店 \"${rawStoreName}\" 在源数据中未找到匹配项`);\n    }\n  }\n\n  // === 统一报错处理 ===\n  if (errors.length > 0) {\n    console.error(\"🚨 === 门店匹配报错 === 🚨\");\n    errors.forEach(err => console.error(err));\n    // 💡 如果需要遇到报错就立刻中断程序，取消下面这行的注释：\n    // throw new Error(`匹配中断：共有 ${errors.length} 个门店未能成功匹配！`);\n  } else {\n    console.log(\"✅ 所有门店匹配成功！\");\n  }\n  \n  return storeList;\n}\n\n// matchAndInsertId($('解析python返回的数据'), list2);\n\n// let arr = $('判断是否解析成功').first().json.data.filter(item=>item['Transaction Number'] == '1005'|| item['Transaction Number'] == '40994')\n\nlet arr = $('判断是否解析成功').first().json.data\n\nconst arr2 = $('解析出需要的数据结构').all().map(item=>{\n  return item.json\n})\n\nmatchMultiToOne(arr, arr2)\n// arr = arr.filter(item=>item.id!=\"tblLxuimhdypLyvaf\")\n\nreturn arr"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    432,
+    -656
+   ],
+   "id": "545fd070-2631-4f99-80f0-ac41d58dbcd5",
+   "name": "匹配对应的在线表格"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://python-runner:8000/run",
+    "sendBody": true,
+    "bodyParameters": {
+     "parameters": [
+      {
+       "name": "script",
+       "value": "workflow001-toAirtables/parse_bill_to_json.py"
+      },
+      {
+       "name": "args",
+       "value": "={{[\"--in\", $json.result[0], \"--sku\", $json.result[1]]}}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    -544,
+    -576
+   ],
+   "id": "3c6fb8ee-6d14-43bd-beb7-49a4bf6da154",
+   "name": "python处理数据1"
+  },
+  {
+   "parameters": {
+    "options": {}
+   },
+   "type": "n8n-nodes-base.splitInBatches",
+   "typeVersion": 3,
+   "position": [
+    656,
+    -656
+   ],
+   "id": "66121537-e8a0-4738-a6ce-5461612e51a3",
+   "name": "Loop Over Items1"
+  },
+  {
+   "parameters": {
+    "operation": "search",
+    "base": {
+     "__rl": true,
+     "value": "appE0OdVa8Z7qG5M9",
+     "mode": "id"
+    },
+    "table": {
+     "__rl": true,
+     "value": "={{ $json.id }}",
+     "mode": "id"
+    },
+    "filterByFormula": "=={{ $json['Transaction Number'] && $json['Platform SKU']\n  ? 'AND({Order} = ' + Number(String($json['Transaction Number']).split('-').pop()) +\n    ', {Lineitem sku} = ' + JSON.stringify(String($json['Platform SKU'])) + ')'\n  : 'FALSE()' }}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.airtable",
+   "typeVersion": 2.2,
+   "position": [
+    832,
+    -640
+   ],
+   "id": "373812b3-ab09-44f6-92a3-e0ccd6f9e9f7",
+   "name": "Search records1",
+   "alwaysOutputData": true,
+   "credentials": {
+    "airtableTokenApi": {
+     "id": "LOtNXRYp1NNLd5Wd",
+     "name": "actual_write"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "method": "PATCH",
+    "url": "=https://api.airtable.com/v0/appE0OdVa8Z7qG5M9/{{ $('Loop Over Items1').item.json.id }}/{{ $json.id }}",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "airtableTokenApi",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "Bearer ***REDACTED***"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "raw",
+    "rawContentType": "application/json",
+    "body": "={\n  \"fields\": {\n    \"Product Cost\": {{ $('Loop Over Items1').item.json[\"product cost\"].toFixed(2) }},\n    \"Shipping Cost\": {{ $('Loop Over Items1').item.json[\"shipping fee\"].toFixed(2) }}\n  }\n}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    1776,
+    -368
+   ],
+   "id": "0435eeac-084d-4cbb-b522-1762ee3c98df",
+   "name": "根据id更新数据2",
+   "retryOnFail": false,
+   "credentials": {
+    "airtableTokenApi": {
+     "id": "LOtNXRYp1NNLd5Wd",
+     "name": "actual_write"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "return JSON.parse($input.first().json.stdout)"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -320,
+    -576
+   ],
+   "id": "942abecc-91b0-418d-b3e2-33002df2e6cf",
+   "name": "JSON解析返回的数据"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "7bd45826-8ecf-4c91-b4ca-18f33616d385",
+       "leftValue": "={{ $json.ok }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "equals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    -96,
+    -576
+   ],
+   "id": "b465f252-cdec-4189-b36b-d661c8d3a98b",
+   "name": "判断是否解析成功"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://open.feishu.cn/open-apis/bot/v2/hook/7697598c-2e86-407b-a011-f74b93fd9364",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"msg_type\": \"interactive\",\n  \"card\": {\n    \"config\": {\n      \"wide_screen_mode\": true\n    },\n    \"header\": {\n      \"template\": \"red\",\n      \"title\": {\n        \"tag\": \"plain_text\",\n        \"content\": \"Airtable 在线表格填写错误信息\"\n      }\n    },\n    \"elements\": [\n      {\n        \"tag\": \"div\",\n        \"text\": {\n          \"tag\": \"lark_md\",\n          \"content\": \"**错误信息**\\n{{ $json.stderr || $json.error || $json.stdout || '未知错误' }}\"\n        }\n      }\n    ]\n  }\n}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    96,
+    -480
+   ],
+   "id": "974793ed-1fa7-4cb0-b8ef-0327fc6eee7b",
+   "name": "python解析错误发通知"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://open.feishu.cn/open-apis/bot/v2/hook/7697598c-2e86-407b-a011-f74b93fd9364",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"msg_type\": \"interactive\",\n  \"card\": {\n    \"config\": {\n      \"wide_screen_mode\": true\n    },\n    \"header\": {\n      \"template\": \"red\",\n      \"title\": {\n        \"tag\": \"plain_text\",\n        \"content\": \"Airtable 在线表格填写错误信息\"\n      }\n    },\n    \"elements\": [\n      {\n        \"tag\": \"div\",\n        \"text\": {\n          \"tag\": \"lark_md\",\n          \"content\": \"**未在 Airtable 中查到对应记录，请检查订单号或 SKU。**\"\n        }\n      },\n      {\n        \"tag\": \"div\",\n        \"fields\": [\n          {\n            \"is_short\": true,\n            \"text\": {\n              \"tag\": \"lark_md\",\n              \"content\": \"**订单号**\\n{{ $('Loop Over Items1').item.json['Transaction Number'] || '-' }}\"\n            }\n          },\n          {\n            \"is_short\": true,\n            \"text\": {\n              \"tag\": \"lark_md\",\n              \"content\": \"**Platform SKU**\\n{{ $('Loop Over Items1').item.json['Platform SKU'] || '-' }}\"\n            }\n          },\n          {\n            \"is_short\": true,\n            \"text\": {\n              \"tag\": \"lark_md\",\n              \"content\": \"**在线表格 ID**\\n{{ $('Loop Over Items1').item.json.id || '-' }}\"\n            }\n          },\n          {\n            \"is_short\": true,\n            \"text\": {\n              \"tag\": \"lark_md\",\n              \"content\": \"**时间**\\n{{ $now.toFormat('yyyy-MM-dd HH:mm:ss') }}\"\n            }\n          }\n        ]\n      },\n      {\n        \"tag\": \"hr\"\n      },\n      {\n        \"tag\": \"note\",\n        \"elements\": [\n          {\n            \"tag\": \"plain_text\",\n            \"content\": \"请检查该订单在对应在线表格中是否已填写，或 SKU 是否匹配。\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    2336,
+    -656
+   ],
+   "id": "0f103fa6-85e5-4e04-9f7f-0b9673744ca9",
+   "name": "没查到记录发通知"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "34ac1a3d-28bb-4a01-a947-9e870a277f86",
+       "leftValue": "={{ $json.id }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notExists",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    1232,
+    -640
+   ],
+   "id": "73d9babd-95af-49d4-904a-f58aa0cf062c",
+   "name": "判断是否查到记录"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://open.feishu.cn/open-apis/bot/v2/hook/7697598c-2e86-407b-a011-f74b93fd9364",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json.body }}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    1344,
+    -880
+   ],
+   "id": "0c8a2b49-7b91-449c-999c-f6a513022eee",
+   "name": "执行成功发通知",
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "formTitle": "请上传所有所需文件来填写Airtable在线表格",
+    "formFields": {
+     "values": [
+      {
+       "fieldLabel": "账单文件",
+       "fieldType": "file",
+       "fieldName": "bill_file",
+       "requiredField": true
+      },
+      {
+       "fieldLabel": "计算结果文件",
+       "fieldType": "file",
+       "fieldName": "compute_file",
+       "requiredField": true
+      }
+     ]
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.formTrigger",
+   "typeVersion": 2.6,
+   "position": [
+    -1344,
+    -576
+   ],
+   "id": "c1d64a5e-6328-479b-87a6-7b6382af0342",
+   "name": "On form submission1",
+   "webhookId": "98195800-d3f6-48ef-b0de-ac4460f671e7"
+  },
+  {
+   "parameters": {
+    "operation": "write",
+    "fileName": "=/data/data/workflow001-toAirtable/input_file/{{ $json.bill_file[0].filename.replace(\".xlsx\", \"\")+\"_\"+$now.format('yyyyMMddHHmmss')+ \".xlsx\" }}",
+    "dataPropertyName": "bill_file",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.readWriteFile",
+   "typeVersion": 1.1,
+   "position": [
+    -1152,
+    -688
+   ],
+   "id": "fd3e104f-f2b3-477d-ab88-869558cd49a8",
+   "name": "存放账单文件"
+  },
+  {
+   "parameters": {
+    "operation": "write",
+    "fileName": "=/data/data/workflow001-toAirtable/input_file/{{ $json.compute_file[0].filename.replace(\".xlsx\", \"\")+\"_\"+$now.format('yyyyMMddHHmmss')+ \".xlsx\" }}",
+    "dataPropertyName": "compute_file",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.readWriteFile",
+   "typeVersion": 1.1,
+   "position": [
+    -1152,
+    -480
+   ],
+   "id": "fcf77b05-4936-4f05-bc18-320013d16cb8",
+   "name": "存放计算结果文件"
+  },
+  {
+   "parameters": {},
+   "type": "n8n-nodes-base.merge",
+   "typeVersion": 3.2,
+   "position": [
+    -976,
+    -576
+   ],
+   "id": "3ffc139d-91ce-4826-b682-fd9b018b2f60",
+   "name": "Merge"
+  },
+  {
+   "parameters": {
+    "jsCode": "const arr = $input.all().map(item=>item.json.fileName)\nconsole.log(arr)\nreturn {\"result\": arr}"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -752,
+    -576
+   ],
+   "id": "a72f3a22-cfc1-40af-9fe3-4f8fc4d7a188",
+   "name": "Code in JavaScript1"
+  },
+  {
+   "parameters": {
+    "jsCode": "const items = $input.all()\n  .map(i => i.json)\n  .filter(x => x && x.fields)\n\nconst rows = items.map(item => {\n  const f = item.fields;\n\n  return {\n    order: String(f['Order'] ?? ''),\n    sku: String(f['Lineitem sku'] ?? ''),\n    product_cost: String(f['Product Cost'] ?? ''),\n    shipping_cost: String(f['Shipping Cost'] ?? ''),\n    status: String(f['Status'] ?? ''),\n    // qty: String(f['Qty'] ?? '')\n  };\n});\n\nconst total = rows.length;\nconst fileName = $('On form submission1').first().json.bill_file[0].filename\nconst productSum = rows.reduce(\n  (sum, r) => sum + (Number(r.product_cost) || 0),\n  0\n);\nconst shippingSum = rows.reduce(\n  (sum, r) => sum + (Number(r.shipping_cost) || 0),\n  0\n);\n\nconst body = {\n  msg_type: 'interactive',\n  card: {\n    config: { wide_screen_mode: true },\n    header: {\n      template: 'green',\n      title: {\n        tag: 'plain_text',\n        content: 'Airtable 在线表格填写成功'\n      }\n    },\n    elements: [\n      {\n        tag: 'div',\n        text: {\n          tag: 'lark_md',\n          content:\n            `<at id=ou_1f66740b34edcacdf187c449949018ae></at>\\n` + // 👈 新增：艾特指定用户\n            `**账单文件${fileName}**\\n` +\n            `**执行成功**\\n` +\n            `条数：**${total}**\\n` +\n            `Product cost 合计：**${productSum.toFixed(2)}**\\n` +\n            `Shipping cost 合计：**${shippingSum.toFixed(2)}**\\n` +\n            `时间：${$now.toFormat('yyyy-MM-dd HH:mm:ss')}`\n        }\n      },\n      { tag: 'hr' },\n      {\n        tag: 'table',\n        page_size: 10,\n        row_height: 'low',\n        header_style: {\n          text_align: 'left',\n          background_style: 'grey',\n          bold: true\n        },\n        columns: [\n          { name: 'order', display_name: 'Order', data_type: 'text' },\n          { name: 'sku', display_name: 'Lineitem sku', data_type: 'text' },\n          { name: 'product_cost', display_name: 'Product cost', data_type: 'text' },\n          { name: 'shipping_cost', display_name: 'Shipping cost', data_type: 'text' },\n          { name: 'status', display_name: 'Status', data_type: 'text' }\n        ],\n        rows\n      }\n    ]\n  }\n};\n\nreturn [{\n  json: {\n    body,\n    count: total\n  }\n}];"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    912,
+    -1072
+   ],
+   "id": "b673bf35-fc5e-4309-bac4-6eb642c60a3c",
+   "name": "Code in JavaScript3"
+  },
+  {
+   "parameters": {
+    "operation": "search",
+    "base": {
+     "__rl": true,
+     "value": "appE0OdVa8Z7qG5M9",
+     "mode": "id"
+    },
+    "table": {
+     "__rl": true,
+     "value": "={{ $('Loop Over Items1').item.json.id }}",
+     "mode": "id"
+    },
+    "filterByFormula": "=={{ $('Loop Over Items1').item.json['Transaction Number'] && $('Loop Over Items1').item.json['Item Name']\n  ? 'AND({Order} = ' + Number(String($('Loop Over Items1').item.json['Transaction Number']).split('-').pop()) +\n    ', SEARCH(' + JSON.stringify(String($('Loop Over Items1').item.json['Item Name'])) + ', {Lineitem name}) > 0)'\n  : 'FALSE()' }}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.airtable",
+   "typeVersion": 2.2,
+   "position": [
+    1984,
+    -656
+   ],
+   "id": "f3e0fec8-dd06-48d8-b6e0-e0f397fd4c9d",
+   "name": "Search records",
+   "alwaysOutputData": true,
+   "credentials": {
+    "airtableTokenApi": {
+     "id": "LOtNXRYp1NNLd5Wd",
+     "name": "actual_write"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "34ac1a3d-28bb-4a01-a947-9e870a277f86",
+       "leftValue": "={{ $json.id }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notExists",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    2144,
+    -640
+   ],
+   "id": "d64395c1-a995-4ce6-9d84-e7c4d44802b3",
+   "name": "判断是否查到记录1"
+  },
+  {
+   "parameters": {
+    "method": "PATCH",
+    "url": "=https://api.airtable.com/v0/appE0OdVa8Z7qG5M9/{{ $('Loop Over Items1').item.json.id }}/{{ $json.id }}",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "airtableTokenApi",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "Bearer ***REDACTED***"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "raw",
+    "rawContentType": "application/json",
+    "body": "={\n  \"fields\": {\n    \"Product Cost\": {{ $('Loop Over Items1').item.json[\"product cost\"].toFixed(2) }},\n    \"Shipping Cost\": {{ $('Loop Over Items1').item.json[\"shipping fee\"].toFixed(2) }}\n  }\n}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    2352,
+    -368
+   ],
+   "id": "2eade5d8-1fb6-4538-b27b-5b39364b4c67",
+   "name": "根据id更新数据",
+   "retryOnFail": false,
+   "credentials": {
+    "airtableTokenApi": {
+     "id": "LOtNXRYp1NNLd5Wd",
+     "name": "actual_write"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\n\nreturn $input.all().map(item=>{\n  item.json[\"size\"] = $input.all().length\n  return item\n})"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1408,
+    -624
+   ],
+   "id": "feaa3722-f1d1-4208-a2dc-f7ba4ab3a194",
+   "name": "获取查询到的记录条数"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "56c46d94-29e6-4bfe-ac19-595411d405c6",
+       "leftValue": "={{ $json.size }}",
+       "rightValue": 1,
+       "operator": {
+        "type": "number",
+        "operation": "gt"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    1584,
+    -624
+   ],
+   "id": "40f676dd-6c9d-4972-b090-4d09a9249dfb",
+   "name": "判断是否查到多条记录"
+  },
+  {
+   "parameters": {
+    "jsCode": "return $('Loop Over Items1').first()"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1760,
+    -640
+   ],
+   "id": "32d1e95c-4056-467f-8aca-d4e955279c97",
+   "name": "返回原始数据"
+  },
+  {
+   "parameters": {
+    "jsCode": "const items = $input.all().map(i => i.json);\n\n// 只取没有 fields 的异常数据\nconst rows = items\n  .filter(x => !(x && x.fields))\n  .map(item => ({\n    transaction:  String(item['Transaction Number'] ?? ''),\n    item_name:    String(item['Item Name'] ?? ''),\n    platform_sku: String(item['Platform SKU'] ?? ''),\n    status:       '数据异常，需人工录入'\n  }));\n\nconst total = rows.length;\n\nconst fileName = $('On form submission1').first().json.bill_file[0].filename\n\nconst body = {\n  msg_type: 'interactive',\n  card: {\n    config: { wide_screen_mode: true },\n    header: {\n      template: 'orange',\n      title: { tag: 'plain_text', content: '⚠️ 数据异常，需人工录入' }\n    },\n    elements: [\n      {\n        tag: 'div',\n        text: {\n          tag: 'lark_md',\n          content:\n            `<at id=ou_1f66740b34edcacdf187c449949018ae></at>\\n` +\n            `**请处理账单文件${fileName}异常情况**\\n` +\n            `时间：${$now.toFormat('yyyy-MM-dd HH:mm:ss')}`\n        }\n      },\n      { tag: 'hr' },\n      {\n        tag: 'table',\n        page_size: 10,\n        row_height: 'low',\n        header_style: { text_align: 'left', background_style: 'grey', bold: true },\n        columns: [\n          { name: 'transaction',  display_name: 'Transaction Number', data_type: 'text' },\n          { name: 'item_name',    display_name: 'Item Name',          data_type: 'text' },\n          { name: 'platform_sku', display_name: 'Platform SKU',       data_type: 'text' },\n          { name: 'status',       display_name: 'Status',             data_type: 'text' }\n        ],\n        rows\n      }\n    ]\n  }\n};\n\nreturn [{ json: { body, count: total } }];"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    864,
+    -800
+   ],
+   "id": "49890d7e-4385-4a3b-8d5b-1271cf47c33f",
+   "name": "Code in JavaScript"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "a0cf016e-5b57-4332-bc4d-bf5df01dbcbe",
+       "leftValue": "={{ $json.body.card.elements[2].rows }}",
+       "rightValue": "",
+       "operator": {
+        "type": "array",
+        "operation": "notEmpty",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    1088,
+    -800
+   ],
+   "id": "f6e67936-ba50-4198-9f89-6e4229ba5a32",
+   "name": "If"
+  }
+ ],
+ "connections": {
+  "获取所有的在线表格": {
+   "main": [
+    [
+     {
+      "node": "解析出需要的数据结构",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "解析出需要的数据结构": {
+   "main": [
+    [
+     {
+      "node": "匹配对应的在线表格",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "匹配对应的在线表格": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "python处理数据1": {
+   "main": [
+    [
+     {
+      "node": "JSON解析返回的数据",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Loop Over Items1": {
+   "main": [
+    [
+     {
+      "node": "Code in JavaScript3",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Code in JavaScript",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Search records1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Search records1": {
+   "main": [
+    [
+     {
+      "node": "判断是否查到记录",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "根据id更新数据2": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "JSON解析返回的数据": {
+   "main": [
+    [
+     {
+      "node": "判断是否解析成功",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "判断是否解析成功": {
+   "main": [
+    [
+     {
+      "node": "获取所有的在线表格",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "python解析错误发通知",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "没查到记录发通知": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "判断是否查到记录": {
+   "main": [
+    [
+     {
+      "node": "Search records",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "获取查询到的记录条数",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "On form submission1": {
+   "main": [
+    [
+     {
+      "node": "存放账单文件",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "存放计算结果文件",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "存放账单文件": {
+   "main": [
+    [
+     {
+      "node": "Merge",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "存放计算结果文件": {
+   "main": [
+    [
+     {
+      "node": "Merge",
+      "type": "main",
+      "index": 1
+     }
+    ]
+   ]
+  },
+  "Merge": {
+   "main": [
+    [
+     {
+      "node": "Code in JavaScript1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Code in JavaScript1": {
+   "main": [
+    [
+     {
+      "node": "python处理数据1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Code in JavaScript3": {
+   "main": [
+    [
+     {
+      "node": "执行成功发通知",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Search records": {
+   "main": [
+    [
+     {
+      "node": "判断是否查到记录1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "判断是否查到记录1": {
+   "main": [
+    [
+     {
+      "node": "没查到记录发通知",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "根据id更新数据",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "根据id更新数据": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "获取查询到的记录条数": {
+   "main": [
+    [
+     {
+      "node": "判断是否查到多条记录",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "判断是否查到多条记录": {
+   "main": [
+    [
+     {
+      "node": "返回原始数据",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "根据id更新数据2",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "返回原始数据": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Code in JavaScript": {
+   "main": [
+    [
+     {
+      "node": "If",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "If": {
+   "main": [
+    [
+     {
+      "node": "执行成功发通知",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "binaryMode": "separate",
+  "timeSavedMode": "fixed",
+  "errorWorkflow": "HREvfdugK9QQNmak",
+  "callerPolicy": "workflowsFromSameOwner",
+  "availableInMCP": false
+ },
+ "staticData": null,
+ "meta": {
+  "templateCredsSetupCompleted": true
+ },
+ "nodeGroups": [],
+ "pinData": {},
+ "versionId": "441b3f12-b3e9-4535-8106-655e67066deb",
+ "activeVersionId": "441b3f12-b3e9-4535-8106-655e67066deb",
+ "versionCounter": 1415,
+ "triggerCount": 1,
+ "sourceWorkflowId": null,
+ "tags": [],
+ "shared": [
+  {
+   "updatedAt": "2026-10-28T06:49:23.369Z",
+   "createdAt": "2026-10-28T06:49:23.369Z",
+   "role": "workflow:owner",
+   "workflowId": "NjNTrPqe5p06Kd7W",
+   "projectId": "X1Hl08KPV0Zp1tHQ",
+   "project": {
+    "updatedAt": "2026-10-26T02:02:16.400Z",
+    "createdAt": "2026-10-26T01:45:51.871Z",
+    "id": "X1Hl08KPV0Zp1tHQ",
+    "name": "Feng Ming <mingfeng1026@proton.me>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "21992e0f-eaf9-4b0b-9538-ca2c3d839d39"
+   }
+  }
+ ],
+ "versionMetadata": {
+  "name": "新增了人工录入的提醒模式",
+  "description": ""
+ }
+}

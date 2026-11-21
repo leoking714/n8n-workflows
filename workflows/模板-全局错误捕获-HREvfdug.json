@@ -1,0 +1,285 @@
+{
+ "updatedAt": "2026-11-09T01:43:24.819Z",
+ "createdAt": "2026-10-27T03:43:21.542Z",
+ "id": "HREvfdugK9QQNmak",
+ "name": "模板｜全局错误捕获",
+ "description": null,
+ "active": true,
+ "isArchived": false,
+ "nodes": [
+  {
+   "parameters": {},
+   "id": "f5e438f3-370c-4602-bd84-1c5153ea35b5",
+   "name": "错误触发器",
+   "type": "n8n-nodes-base.errorTrigger",
+   "typeVersion": 1,
+   "position": [
+    -320,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "const e = $json;\n\nreturn [{\n  json: {\n    workflow: e.workflow?.name ?? 'unknown',\n    workflow_id: e.workflow?.id ?? '',\n    execution_id: e.execution?.id ?? '',\n    failed_node: e.execution?.lastNodeExecuted ?? '',\n    error: e.execution?.error?.message ?? '',\n    stack: e.execution?.error?.stack ?? '',\n    execution_url: e.execution?.url ?? '',\n    time: $now.toFormat('yyyy-MM-dd HH:mm:ss'),\n  },\n}];"
+   },
+   "id": "7b43dbcc-8965-4ab1-b6ee-3d94906580b2",
+   "name": "整理错误信息",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -96,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "toJson",
+    "options": {
+     "format": true,
+     "fileName": "error.json"
+    }
+   },
+   "id": "27ae4cbf-7bb3-424e-97ba-1e4ca6ec23c1",
+   "name": "转成 JSON 文件",
+   "type": "n8n-nodes-base.convertToFile",
+   "typeVersion": 1.1,
+   "position": [
+    144,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "write",
+    "fileName": "={{ $('Code in JavaScript').item.json.folder }}/error-{{ $execution.id }}.json",
+    "dataPropertyName": "=data",
+    "options": {}
+   },
+   "id": "57db7854-59d7-4599-81d0-8b7697260267",
+   "name": "写入错误日志",
+   "type": "n8n-nodes-base.readWriteFile",
+   "typeVersion": 1.1,
+   "position": [
+    1056,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "content": "## 全局错误捕获模板\n\n**它不会自己触发。** 用法：\n\n1. 打开要监控的工作流；\n2. Settings → Error Workflow → 选择「模板｜全局错误捕获」；\n3. 该工作流失败时，会自动执行这里。\n\n输出：`/data/errors/error-<executionId>.json`\n（宿主机 `~/n8n/data/errors/`）\n\n下方「发送告警」节点默认禁用，填好 URL 后启用即可。",
+    "height": 320,
+    "width": 420,
+    "color": 4
+   },
+   "id": "ab619a57-1cd2-4eac-9c32-7d34878749be",
+   "name": "使用说明",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    -320,
+    -256
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://example.com/webhook",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json }}",
+    "options": {}
+   },
+   "id": "42cf3538-4be7-49eb-8ab5-3255b56e7b83",
+   "name": "发送告警（可选）",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    -320,
+    224
+   ],
+   "disabled": true
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://python-runner:8000/run",
+    "sendBody": true,
+    "bodyParameters": {
+     "parameters": [
+      {
+       "name": "script",
+       "value": "data/error_folder_create.py"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    368,
+    0
+   ],
+   "id": "f7a659de-881f-450b-8774-ec1d3770ae79",
+   "name": "HTTP Request"
+  },
+  {
+   "parameters": {
+    "jsCode": "const obj = $input.first().json.stdout\n\nconst s = obj.replace(\" \", \"\").replace(\"\\n\", \"\")\n\n\n\nreturn JSON.parse(s)"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    592,
+    0
+   ],
+   "id": "3f2040a2-de80-4a0e-9d32-ad5e4a0c21f0",
+   "name": "Code in JavaScript"
+  },
+  {
+   "parameters": {
+    "operation": "toJson",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.convertToFile",
+   "typeVersion": 1.1,
+   "position": [
+    816,
+    0
+   ],
+   "id": "815dcdc7-8c84-429a-9f98-3671fdb4cbea",
+   "name": "Convert to File"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://open.feishu.cn/open-apis/bot/v2/hook/7697598c-2e86-407b-a011-f74b93fd9364",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"msg_type\": \"post\",\n  \"content\": {\n    \"post\": {\n      \"zh_cn\": {\n        \"title\": \"{{ $json.workflow }}错误信息\",\n        \"content\": [\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"任务执行结果：\"\n            }\n          ],\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"状态: \"\n            },\n            {\n              \"tag\": \"text\",\n              \"text\": \"❌ 失败\"\n            }\n          ],\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"执行时间：{{ $json.time }}\"\n            }\n          ],\n          [\n            {\n              \"tag\": \"text\",\n              \"text\": \"失败原因：{{ $json.error }}\"\n            }\n          ]\n        ]\n      }\n    }\n  }\n}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    144,
+    -160
+   ],
+   "id": "6aef32a0-b5d6-404a-b1d3-1b92f74f279b",
+   "name": "将流程运行失败原因发送飞书群聊"
+  }
+ ],
+ "connections": {
+  "错误触发器": {
+   "main": [
+    [
+     {
+      "node": "整理错误信息",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "整理错误信息": {
+   "main": [
+    [
+     {
+      "node": "转成 JSON 文件",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "将流程运行失败原因发送飞书群聊",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "转成 JSON 文件": {
+   "main": [
+    [
+     {
+      "node": "HTTP Request",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "HTTP Request": {
+   "main": [
+    [
+     {
+      "node": "Code in JavaScript",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Code in JavaScript": {
+   "main": [
+    [
+     {
+      "node": "Convert to File",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Convert to File": {
+   "main": [
+    [
+     {
+      "node": "写入错误日志",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "binaryMode": "separate"
+ },
+ "staticData": null,
+ "meta": {
+  "templateCredsSetupCompleted": true
+ },
+ "nodeGroups": [],
+ "pinData": {},
+ "versionId": "a9b80a91-71ab-407c-8aea-3c05adc00a6e",
+ "activeVersionId": "a9b80a91-71ab-407c-8aea-3c05adc00a6e",
+ "versionCounter": 132,
+ "triggerCount": 0,
+ "sourceWorkflowId": null,
+ "tags": [],
+ "shared": [
+  {
+   "updatedAt": "2026-10-27T03:43:21.542Z",
+   "createdAt": "2026-10-27T03:43:21.542Z",
+   "role": "workflow:owner",
+   "workflowId": "HREvfdugK9QQNmak",
+   "projectId": "X1Hl08KPV0Zp1tHQ",
+   "project": {
+    "updatedAt": "2026-10-26T02:02:16.400Z",
+    "createdAt": "2026-10-26T01:45:51.871Z",
+    "id": "X1Hl08KPV0Zp1tHQ",
+    "name": "Feng Ming <mingfeng1026@proton.me>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "21992e0f-eaf9-4b0b-9538-ca2c3d839d39"
+   }
+  }
+ ],
+ "versionMetadata": {
+  "name": "飞书通知错误信息",
+  "description": ""
+ }
+}

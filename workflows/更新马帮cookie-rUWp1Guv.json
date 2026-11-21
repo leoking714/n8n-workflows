@@ -1,0 +1,167 @@
+{
+ "updatedAt": "2026-11-18T09:14:00.449Z",
+ "createdAt": "2026-11-09T04:27:25.246Z",
+ "id": "rUWp1GuvYLeWPd7z",
+ "name": "更新马帮cookie",
+ "description": null,
+ "active": true,
+ "isArchived": false,
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "get_mabang_cookie",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.2,
+   "position": [
+    -576,
+    -16
+   ],
+   "id": "67846342-d931-499b-be55-bd65f46d1c44",
+   "name": "Webhook",
+   "webhookId": "f10cc10f-4d07-4741-bdcb-7724d343cb5a"
+  },
+  {
+   "parameters": {
+    "jsCode": "return JSON.parse($input.first().json.body)"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -352,
+    -16
+   ],
+   "id": "9098c463-0361-4cf7-b078-647f169652cc",
+   "name": "Code in JavaScript"
+  },
+  {
+   "parameters": {
+    "operation": "update",
+    "dataTableId": {
+     "__rl": true,
+     "value": "GzX2mnmVzSNYqVXN",
+     "mode": "list",
+     "cachedResultName": "cookie",
+     "cachedResultUrl": "/projects/X1Hl08KPV0Zp1tHQ/datatables/GzX2mnmVzSNYqVXN"
+    },
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "website",
+       "keyValue": "马帮"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "website": "马帮",
+      "cookie_content": "={{ $json.cookie }}"
+     },
+     "matchingColumns": [],
+     "schema": [
+      {
+       "id": "website",
+       "displayName": "website",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "readOnly": false,
+       "removed": false
+      },
+      {
+       "id": "cookie_content",
+       "displayName": "cookie_content",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "readOnly": false,
+       "removed": false
+      }
+     ],
+     "attemptToConvertTypes": false,
+     "convertFieldsToString": false
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    -128,
+    -16
+   ],
+   "id": "80c24aa8-4d8b-4b6b-a286-c97962a9bd63",
+   "name": "Update row(s)"
+  }
+ ],
+ "connections": {
+  "Webhook": {
+   "main": [
+    [
+     {
+      "node": "Code in JavaScript",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Code in JavaScript": {
+   "main": [
+    [
+     {
+      "node": "Update row(s)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "binaryMode": "separate",
+  "timeSavedMode": "fixed",
+  "errorWorkflow": "HREvfdugK9QQNmak",
+  "callerPolicy": "workflowsFromSameOwner",
+  "availableInMCP": false
+ },
+ "staticData": null,
+ "meta": null,
+ "nodeGroups": [],
+ "pinData": {},
+ "versionId": "d848358e-cb4a-4d10-90a7-f640170ce62f",
+ "activeVersionId": "d848358e-cb4a-4d10-90a7-f640170ce62f",
+ "versionCounter": 26,
+ "triggerCount": 1,
+ "sourceWorkflowId": null,
+ "tags": [],
+ "shared": [
+  {
+   "updatedAt": "2026-11-09T04:27:25.246Z",
+   "createdAt": "2026-11-09T04:27:25.246Z",
+   "role": "workflow:owner",
+   "workflowId": "rUWp1GuvYLeWPd7z",
+   "projectId": "X1Hl08KPV0Zp1tHQ",
+   "project": {
+    "updatedAt": "2026-10-26T02:02:16.400Z",
+    "createdAt": "2026-10-26T01:45:51.871Z",
+    "id": "X1Hl08KPV0Zp1tHQ",
+    "name": "Feng Ming <mingfeng1026@proton.me>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "21992e0f-eaf9-4b0b-9538-ca2c3d839d39"
+   }
+  }
+ ],
+ "versionMetadata": {
+  "name": "更新马帮cookie",
+  "description": ""
+ }
+}

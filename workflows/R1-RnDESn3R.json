@@ -1,0 +1,888 @@
+{
+ "updatedAt": "2026-11-13T01:16:36.262Z",
+ "createdAt": "2026-11-06T07:23:53.438Z",
+ "id": "RnDESn3R3Wl2lVxT",
+ "name": "R1",
+ "description": null,
+ "active": true,
+ "isArchived": false,
+ "nodes": [
+  {
+   "parameters": {
+    "method": "POST",
+    "url": " https://www.mabangerp.com/index.php?mod=order.oTc",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "user-agent",
+       "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+      },
+      {
+       "name": "x-requested-with",
+       "value": "XMLHttpRequest"
+      },
+      {
+       "name": "Accept-Language",
+       "value": "zh-CN,zh;q=0.9"
+      },
+      {
+       "name": "Accept",
+       "value": "application/json, text/javascript, */*; q=0.01"
+      },
+      {
+       "name": "Cookie",
+       "value": "={{ $json.cookie_content }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "form-urlencoded",
+    "specifyBody": "string",
+    "body": "=m=order &a=list &page=1 &rowsPerPage=100 &tabId=3 &Order.orderStatus=2 &orderhighfastsearch=isOutOfStockOrder-2 &Order.shops[]={{ $('Loop Over Items').item.json.shopId }}",
+    "options": {
+     "pagination": {
+      "pagination": {
+       "parameters": {
+        "parameters": [
+         {
+          "type": "body",
+          "name": "page",
+          "value": "={{ $pageCount + 1 }}"
+         }
+        ]
+       },
+       "paginationCompleteWhen": "other",
+       "completeExpression": "={{ (() => {\n  let body = $response.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { return true; }\n  }\n\n  let data = body?.data ?? body;\n  if (typeof data === 'string') {\n    try { data = JSON.parse(data); } catch (e) { return true; }\n  }\n\n  const list = data?.purchaseData ?? [];\n  return !Array.isArray(list) || list.length < 500;\n})() }}",
+       "limitPagesFetched": true,
+       "requestInterval": 500
+      }
+     }
+    }
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    -1744,
+    448
+   ],
+   "id": "81741e1f-3016-48b7-8d50-209efb853262",
+   "name": "采购订单",
+   "executeOnce": false,
+   "retryOnFail": true,
+   "waitBetweenTries": 2000
+  },
+  {
+   "parameters": {
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "value": "krFzk12DIV7LUap0",
+     "mode": "list",
+     "cachedResultName": "shopConfig",
+     "cachedResultUrl": "/projects/X1Hl08KPV0Zp1tHQ/datatables/krFzk12DIV7LUap0"
+    },
+    "matchType": "allConditions",
+    "returnAll": true
+   },
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    -2240,
+    304
+   ],
+   "id": "14e7c987-aaaf-4be5-be80-c656bffde00e",
+   "name": "Get row(s)"
+  },
+  {
+   "parameters": {
+    "options": {}
+   },
+   "type": "n8n-nodes-base.splitInBatches",
+   "typeVersion": 3,
+   "position": [
+    -2064,
+    304
+   ],
+   "id": "a8ac444f-b017-4917-91ab-35b628cb78f3",
+   "name": "Loop Over Items"
+  },
+  {
+   "parameters": {
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "value": "GzX2mnmVzSNYqVXN",
+     "mode": "list",
+     "cachedResultName": "cookie",
+     "cachedResultUrl": "/projects/X1Hl08KPV0Zp1tHQ/datatables/GzX2mnmVzSNYqVXN"
+    },
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "updatedAt",
+       "condition": "gte",
+       "keyValue": "={{ $now.format('yyyy-MM-dd 00:00:00').toDateTime() }}"
+      }
+     ]
+    }
+   },
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    -1904,
+    448
+   ],
+   "id": "fbcb7c91-4d37-4896-b57b-7518552a0eb8",
+   "name": "获取今天更新的cookie"
+  },
+  {
+   "parameters": {
+    "jsCode": "const list = JSON.parse($input.first().json.data)\n  .orderDataList\n  .filter(item => item.paidTimeForNow > 1);\n\nif (list.length === 0) {\n  return [{ json: { _skip: true } }];\n}\n\nreturn list;"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -1584,
+    448
+   ],
+   "id": "921f48be-5d3f-4192-965a-537658d8687d",
+   "name": "获取所有付款时间超过24小时的有货订单"
+  },
+  {
+   "parameters": {
+    "jsCode": "return $input.all().map(item => {\n  if (item.json._skip) {\n    return { json: { _skip: true } };\n  }\n\n  return {\n    json: {\n      \"订单id\": item.json.id,\n      \"shopName\": $('Loop Over Items').first().json.shopName,\n      \"平台订单编号\": item.json.platformOrderId,\n      \"订单编号\": item.json.salesRecordNumber,\n      \"店铺\": item.json.shopIdText,\n      \"国家\": item.json.countryCodeCn,\n      // \"SKU\": item.json.order_ellipsis_title,\n      \"付款时间\": item.json.paidTime,\n      \"owner\": $('Loop Over Items').first().json.owner, \n    }\n  };\n});"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -1168,
+    448
+   ],
+   "id": "665a99e5-dc09-43f3-81be-31a14fdf9d7f",
+   "name": "清洗出所有需要的字段"
+  },
+  {
+   "parameters": {
+    "operation": "write",
+    "fileName": "=/data/data/param4/output/R1output{{ $now.format('yyyyMMddHHmmss') }}.xlsx",
+    "dataPropertyName": "[object Object]",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.readWriteFile",
+   "typeVersion": 1.1,
+   "position": [
+    -1536,
+    32
+   ],
+   "id": "15adf918-2751-4272-93e2-4ef2a7c7b90d",
+   "name": "Read/Write Files from Disk"
+  },
+  {
+   "parameters": {
+    "operation": "xlsx",
+    "binaryPropertyName": "={{ $json }}",
+    "options": {
+     "fileName": ""
+    }
+   },
+   "type": "n8n-nodes-base.convertToFile",
+   "typeVersion": 1.1,
+   "position": [
+    -1728,
+    32
+   ],
+   "id": "83af8355-8533-4e3a-8e7b-c8942532808c",
+   "name": "Convert to File"
+  },
+  {
+   "parameters": {
+    "jsCode": "// 1. 获取输入数据\nconst rawData = $input.all().map(item => item.json);\n\n// 2. 清洗 SKU：优先用已清洗好的 sku 字段，兼容旧的 SKU 长字符串\nfunction cleanSku(item) {\n  // ✅ 你现在输入里已有干净的 sku 字段，直接用\n  if (item.sku && String(item.sku).trim()) {\n    return String(item.sku).trim();\n  }\n  // 兼容旧结构：从 \"商品编号*数量:xxx*1\" 里截取\n  let skuStr = item['SKU'] || '';\n  if (skuStr.includes('商品编号*数量:')) {\n    skuStr = skuStr.split('商品编号*数量:')[1];\n  }\n  return skuStr || '未知';\n}\n\n// 3. 组装行数据（新增 stockQuantity、warehousing_time）\nconst tableRows = rawData.map(item => ({\n  order_no: item['订单编号'] || '未知',\n  platform_no: item['平台订单编号'] || '未知',\n  shopName: item['shopName'] || '未知',   // 分组键\n  shop: item['店铺'] || '未知',            // 表格展示列\n  country: item['国家'] || '未知',\n  sku: cleanSku(item),\n  stockQuantity: item.stockQuantity ?? '未知',      // ✅ 新增：库存数量\n  warehousing_time: item.warehousing_time || '未知', // ✅ 新增：入库时间\n  pay_time: item['付款时间'] || '未知',\n  owner: item['owner'] || ''               // 负责人 ID（用于 @）\n}));\n\nconst pushTime = $now.toFormat('yyyy-MM-dd HH:mm:ss');\n\n// 4. 按 shopName 分组\nconst groups = tableRows.reduce((acc, row) => {\n  const key = row.shopName || '未知';\n  (acc[key] ||= []).push(row);\n  return acc;\n}, {});\n\n// 5. 每个 shopName 一条消息\nreturn Object.entries(groups).map(([shopName, rows]) => {\n  // 表格行只保留 columns 里声明的字段，去掉 shopName 和 owner，避免飞书报 invalid name\n  const tableData = rows.map(({ shopName, owner, ...rest }) => rest);\n\n  // 收集该组内去重后的 owner ID（过滤空值）\n  const ownerIds = [...new Set(\n    rows.map(r => (r.owner || '').trim()).filter(Boolean)\n  )];\n\n  // 拼接 @ 内容；如果没有 owner，则显示提示文字\n  const atContent = ownerIds.length\n    ? ownerIds.map(id => `<at id=${id}></at>`).join(' ') + ' 请及时处理以下未发货订单'\n    : '请及时处理以下未发货订单';\n\n  return {\n    json: {\n      msg_type: \"interactive\",\n      card: {\n        config: { wide_screen_mode: true },\n        header: {\n          title: {\n            content: `Param4 Rule1 未发货订单汇总 - ${shopName}`,\n            tag: \"plain_text\"\n          },\n          template: \"red\"\n        },\n        elements: [\n          {\n            tag: \"div\",\n            text: {\n              tag: \"lark_md\",\n              content: atContent\n            }\n          },\n          {\n            tag: \"div\",\n            text: {\n              tag: \"lark_md\",\n              content: `**📊 数据统计：** 店铺组 **${shopName}** 共有 <font color='red'>**${rows.length}**</font> 条未发货订单，明细如下：`\n            }\n          },\n          {\n            tag: \"table\",\n            page_size: 10,\n            row_height: \"low\",\n            header_style: {\n              text_align: \"left\",\n              background_style: \"grey\",\n              bold: true\n            },\n            columns: [\n              { name: \"order_no\", display_name: \"订单编号\", data_type: \"text\" },\n              { name: \"platform_no\", display_name: \"平台单号\", data_type: \"text\" },\n              { name: \"shop\", display_name: \"店铺\", data_type: \"text\" },\n              { name: \"country\", display_name: \"国家\", data_type: \"text\" },\n              { name: \"sku\", display_name: \"SKU明细\", data_type: \"text\" },\n              { name: \"stockQuantity\", display_name: \"库存数量\", data_type: \"text\" },     // ✅ 新增列\n              { name: \"warehousing_time\", display_name: \"入库时间\", data_type: \"text\" }, // ✅ 新增列\n              { name: \"pay_time\", display_name: \"付款时间\", data_type: \"text\" }\n            ],\n            rows: tableData\n          },\n          { tag: \"hr\" },\n          {\n            tag: \"div\",\n            text: {\n              tag: \"lark_md\",\n              content: `**🕒 推送时间：** <text_tag color='red'>${pushTime}</text_tag>`\n            }\n          },\n          {\n            tag: \"note\",\n            elements: [\n              {\n                tag: \"plain_text\",\n                content: \"⚠️ 系统自动推送 | Param4 Rule1 规则触发\"\n              }\n            ]\n          }\n        ]\n      }\n    }\n  };\n});"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -1728,
+    192
+   ],
+   "id": "087927ed-7d2a-480f-9280-896ffc2ddb1a",
+   "name": "Code in JavaScript1"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://open.feishu.cn/open-apis/bot/v2/hook/7697598c-2e86-407b-a011-f74b93fd9364",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json }}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    -1536,
+    192
+   ],
+   "id": "c4e772bd-549a-416b-b673-fcdd8a6b5451",
+   "name": "将流程运行成功信息发送飞书群聊"
+  },
+  {
+   "parameters": {
+    "jsCode": "return $input.all().filter(item => !item.json._skip);"
+   },
+   "id": "d4d55f43-b55d-4a45-944c-5d141e64c532",
+   "name": "过滤空行",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -1888,
+    112
+   ]
+  },
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "0 22 * * *"
+      }
+     ]
+    }
+   },
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.4,
+   "position": [
+    -2448,
+    304
+   ],
+   "id": "9b6201cc-5e07-4474-95e5-024904991e16",
+   "name": "Schedule Trigger"
+  },
+  {
+   "parameters": {
+    "jsCode": "return {\"ids\": $input.all().map(item => item.json['订单id']).join(',')}"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -1008,
+    448
+   ],
+   "id": "c657fdd9-b026-4e18-931d-3892f1ee85a9",
+   "name": "将所有的订单对应的商品id串成一个参数"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://www.mabangerp.com/index.php?mod=order.showOrderItems",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "user-agent",
+       "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+      },
+      {
+       "name": "x-requested-with",
+       "value": "XMLHttpRequest"
+      },
+      {
+       "name": "Accept-Language",
+       "value": "zh-CN,zh;q=0.9"
+      },
+      {
+       "name": "Accept",
+       "value": "application/json, text/javascript, */*; q=0.01"
+      },
+      {
+       "name": "Cookie",
+       "value": "={{ $('获取今天更新的cookie').item.json.cookie_content }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "form-urlencoded",
+    "bodyParameters": {
+     "parameters": [
+      {
+       "name": "orderItemIq",
+       "value": "={{ $json.ids }}"
+      },
+      {
+       "name": "tableBase",
+       "value": "1"
+      },
+      {
+       "name": "source",
+       "value": "common"
+      },
+      {
+       "name": "orderItemBy",
+       "value": "platformSku asc,isCombo asc,id asc, stockId asc"
+      }
+     ]
+    },
+    "options": {
+     "batching": {
+      "batch": {
+       "batchSize": 10,
+       "batchInterval": 3
+      }
+     }
+    }
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    -848,
+    448
+   ],
+   "id": "d5ea6d8c-959f-4f1c-a553-dc1e71f74178",
+   "name": "根据所有的商品id获取商品数据",
+   "executeOnce": true,
+   "retryOnFail": true,
+   "waitBetweenTries": 2000
+  },
+  {
+   "parameters": {
+    "jsCode": "return JSON.parse($input.first().json.data)"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -688,
+    448
+   ],
+   "id": "244fa436-3dc0-4c4c-9d2a-13141a7eca9d",
+   "name": "解析商品JSON数据"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "eb7a0c00-fb12-400f-8087-eeea899d293c",
+       "leftValue": "={{ $json.success }}",
+       "rightValue": false,
+       "operator": {
+        "type": "boolean",
+        "operation": "exists",
+        "singleValue": true
+       }
+      },
+      {
+       "id": "b725c126-890c-4d62-992a-0058bb48e7db",
+       "leftValue": "={{ $json.success }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "equals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    -512,
+    448
+   ],
+   "id": "247f038b-ee85-4d60-b416-5e7a1c80aa34",
+   "name": "判断请求是否成功"
+  },
+  {
+   "parameters": {
+    "jsCode": "// 第一份：数组（每项形如 { json: {...} }）\nconst orders = $('清洗出所有需要的字段').all();\n// 第二份：对象\nconst resp = $input.first().json;\n\nconst stockData = resp.stock_data || {};\nconst mapQ = resp.findOrderItemWarehouseQ || {};\nconst titleMap = resp.order_ellipsis_title || {};\nconst otherTitleMap = resp.order_ellipsis_other_title || {};\nconst htmlMap = resp.order_list_html_header || {};\n\n// 从 title 提取所有 SKU，按商品行顺序返回数组\nfunction extractSkus(titleStr) {\n  if (!titleStr) return [];\n  const marker = '商品编号*数量';\n  const idx = titleStr.indexOf(marker);\n  if (idx === -1) return [];\n  const rest = titleStr.slice(idx + marker.length).replace(/^[:：]/, '');\n  return rest\n    .split(',')\n    .map(part => {\n      const m = part.match(/^\\s*([\\s\\S]*?)\\*\\d+\\s*$/);\n      return m ? m[1].trim() : part.trim();\n    })\n    .filter(Boolean);\n}\n\n// 解析 findOrderItemWarehouseQ 的 value\nfunction parseMapValue(val) {\n  if (!val) return [];\n  return val.split(\";\").filter(Boolean).map(seg => {\n    const [orderItemId, stockId, warehouseId] = seg.split(\":\");\n    return { orderItemId, stockId, warehouseId };\n  });\n}\n\n// 从 order_list_html_header 建立 orderItemId -> 采购单号(orderId) 映射\nconst orderItemToPurchaseId = {};\nfor (const html of Object.values(htmlMap)) {\n  if (!html) continue;\n  for (const tr of html.split(/<\\/tr>/i)) {\n    if (!tr.trim()) continue;\n    const oidMatch = tr.match(/[?&]orderId=(\\d+)/);\n    const oiMatch = tr.match(/data-orderitemid=\"(\\d+)\"/i);\n    if (oidMatch && oiMatch) {\n      orderItemToPurchaseId[oiMatch[1]] = oidMatch[1];\n    }\n  }\n}\n\nconst result = orders.flatMap(order => {\n  const j = order.json || {};\n  const id = String(j.订单id);\n  const items = parseMapValue(mapQ[id] || \"\");\n  const skus = extractSkus(titleMap[id] || otherTitleMap[id] || \"\");\n\n  // 没有映射到商品行：保留原 json 全部字段，附加字段置空\n  if (items.length === 0) {\n    return [{\n      ...j,\n      id,\n      orderItemId: null,\n      stockId: null,\n      sku: skus[0] || \"\",\n      stockQuantity: null,\n      orderId: null\n    }];\n  }\n\n  return items.map((it, i) => {\n    const s = stockData[it.orderItemId] || {};\n    return {\n      ...j,                                              // 第一份数组所有字段\n      id,\n      orderItemId: it.orderItemId,                       // 第二份\n      stockId: it.stockId,                               // 第二份\n      sku: skus[i] ?? skus[0] ?? \"\",                     // 第二份（按行取）\n      stockQuantity: s.stockQuantity ?? null,            // 第二份\n      orderId: orderItemToPurchaseId[it.orderItemId] ?? null // 第二份：采购单号\n    };\n  });\n});\n\nreturn result;"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -304,
+    432
+   ],
+   "id": "43a403b5-54ab-4996-8787-176e6db79e76",
+   "name": "根据订单id匹配对应的商品数据获取stockId"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": " https://www.mabangerp.com/index.php?mod=purchases.getPurchaseList",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "accept",
+       "value": "application/json, text/javascript, */*; q=0.01"
+      },
+      {
+       "name": "accept-language",
+       "value": "zh-CN,zh;q=0.9"
+      },
+      {
+       "name": "origin",
+       "value": "https://www.mabangerp.com"
+      },
+      {
+       "name": "priority",
+       "value": "u=1, i"
+      },
+      {
+       "name": "sec-ch-ua",
+       "value": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"Google Chrome\";v=\"156\""
+      },
+      {
+       "name": "sec-ch-ua-mobile",
+       "value": "?0"
+      },
+      {
+       "name": "sec-ch-ua-platform",
+       "value": "\"macOS\""
+      },
+      {
+       "name": "sec-fetch-dest",
+       "value": "empty"
+      },
+      {
+       "name": "sec-fetch-mode",
+       "value": "cors"
+      },
+      {
+       "name": "sec-fetch-site",
+       "value": "same-origin"
+      },
+      {
+       "name": "user-agent",
+       "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+      },
+      {
+       "name": "x-requested-with",
+       "value": "XMLHttpRequest"
+      },
+      {
+       "name": "cookie",
+       "value": "lang_global=cn;lang=cn;53gid2=17458254587002;53revisit=1792643187357;MULTI_LANGUAGE_TYPE=%2BYjZ6oacL7xJ%2FKOcmBg9Z7cTOqi7UgOUgujRs4KQ4Ms%3D;login_js_cookie_phone_cookie=;print_picking_key_cookie=number%2Cwarehouse%2CnameCN%2CstockRemark%2CquantityInterval%2ConPassage%2C;order_rows_per_page_data_cookie=100;order_data_js_cookie_get_custom_item=1;purchaselistrowsPerPage_761136=10;Hm_lvt_016d02857372dbbcabf56ce5f43fd3ae=1792643186,1792661835,1793583405;HMACCOUNT=A8144ED2E1EE83B4;visitor_type=old;53kf_72686291_from_host=www.mabangerp.com;uuid_53kf_72686291=341ba7e59e3588e0f002f0bc69b40d31;53kf_72686291_land_page=https%253A%252F%252Fwww.mabangerp.com%252Findex.htm;kf_72686291_land_page_ok=1;53uvid=1;onliner_zdfq72686291=0;CustomitemsPurchaseflag=1;order_data_js_cookie_title_head_switch=1;loginNumCookie=0;loginCookie=;53kf_72686291_keyword=https%3A%2F%2Fwww.mabangerp.com%2Findex.htm;PHPSESSID=4psbffsibq26igv1eqtlvgnu23;53gid0=17458254587002;Hm_lpvt_016d02857372dbbcabf56ce5f43fd3ae=1794358980;invite_53kf_totalnum_1=27;MABANG_ERP_PRO_MEMBERINFO_LOGIN_COOKIE=8d6d5597a3f21de0d536408094241b45;MABANG_ERP_PRO_MEMBERINFO_LOGIN_PLUS=Dttw76rg4fc9lj2SpuYhU0731LVRAFDkLWZttIwgYXX2Ua7rO2q9rWMl%2FEwYJHFgb%2BKguBH6WHKsf7k7CSLCUds2JatkBRyOAforqzKLnXzsrd9YcC0jukZUTOPxKLGF;MABANG_ERP_PRO_UNIQUE_ID=eyJlbXBsb3llZUlkIjoiNzYxMTM2Iiwic2VydmVyTmFtZSI6Ind3dy5tYWJhbmdlcnAuY29tIn0%3D;ce=Tiu5%2BJJUP0Y9x0%2FxgE93mQ%3D%3D;CRAWL_KANDENG_KEY=lI%2BEuazMLmPiOJc1x3KtRKY%2FFkXBgR2KFNE4rpcqmvb8HQZpWzTExzD5LS5KJHHOfKkr9KSqn1J3wZWWkj1WNg%3D%3D;"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "form-urlencoded",
+    "bodyParameters": {
+     "parameters": [
+      {
+       "name": "main_menu",
+       "value": "7"
+      },
+      {
+       "name": "search_textarea",
+       "value": "={{ $json.orderIds }}"
+      },
+      {
+       "name": "search_selecttype",
+       "value": "groupId"
+      },
+      {
+       "name": "searchType",
+       "value": "Purchase_groupIdLikeOrderBillNO"
+      },
+      {
+       "name": "purchaseDetailViewType",
+       "value": "2"
+      },
+      {
+       "name": "isStockSku",
+       "value": "2"
+      },
+      {
+       "name": "thirdPartyOrderType2",
+       "value": "1"
+      },
+      {
+       "name": "timeType",
+       "value": "createTime"
+      },
+      {
+       "name": "page",
+       "value": "1"
+      },
+      {
+       "name": "rowsPerPage",
+       "value": "10"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    16,
+    432
+   ],
+   "id": "3e39e65c-ff2d-4c5d-921e-083727fc44ce",
+   "name": "根据所有的商品id获取商品数据1",
+   "executeOnce": false,
+   "retryOnFail": true,
+   "waitBetweenTries": 2000
+  },
+  {
+   "parameters": {
+    "jsCode": "return {\"orderIds\": $input.all().map(item=>item.json.orderId).join('\\r\\n')}"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -144,
+    432
+   ],
+   "id": "1b861f93-83ac-4eb1-883d-17f07b339705",
+   "name": "组装orderId"
+  },
+  {
+   "parameters": {
+    "jsCode": "const warehouse_arr = JSON.parse($input.first().json.data).purchaseData.map(item=>{\n  return {\n    \"orderId\": item.groupId,\n    \"warehousing_time\": item.lastStorageTime\n  }\n})\n\nconst rows = $('根据订单id匹配对应的商品数据获取stockId').all().map(i => i.json);\n\n// ============================================================\n// 3. 按 orderId 合并\n// ============================================================\nconst timeMap = new Map(\n  warehouse_arr.map(w => [w.orderId, w.warehousing_time])\n);\n\nreturn rows.map(r => ({\n  json: {\n    ...r,\n    warehousing_time: timeMap.get(String(r.orderId)) ?? null\n  }\n}));"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    208,
+    432
+   ],
+   "id": "d54e44ab-72b8-4922-9432-02f4c6e5d716",
+   "name": "插入入库时间到最终的数据"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 4
+     },
+     "conditions": [
+      {
+       "id": "1fcf44b7-1380-4e6e-a44f-29bcca8bd149",
+       "leftValue": "={{ $json._skip }}",
+       "rightValue": false,
+       "operator": {
+        "type": "boolean",
+        "operation": "exists",
+        "singleValue": true
+       }
+      },
+      {
+       "id": "3461b7af-1f0a-4a6c-8f78-40b60fb9c1c3",
+       "leftValue": "={{ $json._skip }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "equals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.4,
+   "position": [
+    -1360,
+    448
+   ],
+   "id": "5f69b201-6f25-40d0-a477-6ec8b48d029b",
+   "name": "If"
+  }
+ ],
+ "connections": {
+  "采购订单": {
+   "main": [
+    [
+     {
+      "node": "获取所有付款时间超过24小时的有货订单",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get row(s)": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Loop Over Items": {
+   "main": [
+    [
+     {
+      "node": "过滤空行",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "获取今天更新的cookie",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "获取今天更新的cookie": {
+   "main": [
+    [
+     {
+      "node": "采购订单",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "获取所有付款时间超过24小时的有货订单": {
+   "main": [
+    [
+     {
+      "node": "If",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "清洗出所有需要的字段": {
+   "main": [
+    [
+     {
+      "node": "将所有的订单对应的商品id串成一个参数",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Convert to File": {
+   "main": [
+    [
+     {
+      "node": "Read/Write Files from Disk",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Code in JavaScript1": {
+   "main": [
+    [
+     {
+      "node": "将流程运行成功信息发送飞书群聊",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "过滤空行": {
+   "main": [
+    [
+     {
+      "node": "Convert to File",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Code in JavaScript1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Schedule Trigger": {
+   "main": [
+    [
+     {
+      "node": "Get row(s)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "将所有的订单对应的商品id串成一个参数": {
+   "main": [
+    [
+     {
+      "node": "根据所有的商品id获取商品数据",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "根据所有的商品id获取商品数据": {
+   "main": [
+    [
+     {
+      "node": "解析商品JSON数据",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "解析商品JSON数据": {
+   "main": [
+    [
+     {
+      "node": "判断请求是否成功",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "判断请求是否成功": {
+   "main": [
+    [
+     {
+      "node": "根据订单id匹配对应的商品数据获取stockId",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "根据订单id匹配对应的商品数据获取stockId": {
+   "main": [
+    [
+     {
+      "node": "组装orderId",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "根据所有的商品id获取商品数据1": {
+   "main": [
+    [
+     {
+      "node": "插入入库时间到最终的数据",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "组装orderId": {
+   "main": [
+    [
+     {
+      "node": "根据所有的商品id获取商品数据1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "插入入库时间到最终的数据": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "If": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "清洗出所有需要的字段",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "binaryMode": "separate",
+  "timeSavedMode": "fixed",
+  "errorWorkflow": "HREvfdugK9QQNmak",
+  "callerPolicy": "workflowsFromSameOwner",
+  "availableInMCP": false
+ },
+ "staticData": {
+  "node:Schedule Trigger": {
+   "recurrenceRules": [
+    null
+   ],
+   "recurrenceRuleSignatures": [
+    null
+   ]
+  }
+ },
+ "meta": null,
+ "nodeGroups": [],
+ "pinData": {},
+ "versionId": "07732ff8-dafb-4ec1-b735-d4ecfbaaf1ad",
+ "activeVersionId": "07732ff8-dafb-4ec1-b735-d4ecfbaaf1ad",
+ "versionCounter": 1127,
+ "triggerCount": 1,
+ "sourceWorkflowId": null,
+ "tags": [],
+ "shared": [
+  {
+   "updatedAt": "2026-11-06T07:23:53.438Z",
+   "createdAt": "2026-11-06T07:23:53.438Z",
+   "role": "workflow:owner",
+   "workflowId": "RnDESn3R3Wl2lVxT",
+   "projectId": "X1Hl08KPV0Zp1tHQ",
+   "project": {
+    "updatedAt": "2026-10-26T02:02:16.400Z",
+    "createdAt": "2026-10-26T01:45:51.871Z",
+    "id": "X1Hl08KPV0Zp1tHQ",
+    "name": "Feng Ming <mingfeng1026@proton.me>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "21992e0f-eaf9-4b0b-9538-ca2c3d839d39"
+   }
+  }
+ ],
+ "versionMetadata": {
+  "name": "加入了没有订单就跳过的逻辑",
+  "description": ""
+ }
+}
