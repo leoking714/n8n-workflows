@@ -4,7 +4,9 @@
  "base": "RvrMbDYgJaZ8mts6vPOcoCb8nMb",
  "tables": {
   "商品": "tbl7LdhmVqh70kZn",
-  "运价": "tblHoCR6bRPAAwsI",
-  "国家": "tblnP5e6VWdU1j1T"
+  "运价-分段": "tblNYhByd3ivGP4L",
+  "国家": "tblnP5e6VWdU1j1T",
+  "全局参数": "tblDPHP5ZgioWinV",
+  "澳大利亚分区": "tbllfbw3d8qAeur8"
  }
 }
