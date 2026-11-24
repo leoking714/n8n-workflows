@@ -58,7 +58,7 @@ say 2/6 "同步自动化脚本"
 mkdir -p "$REPO/scripts"
 rsync -a --delete \
   --exclude '.DS_Store' --exclude '__pycache__' --exclude '*.pyc' \
-  --exclude '*.log' --exclude '*.tmp' \
+  --exclude '*.log' --exclude '*.tmp' --exclude '_archive_*' --exclude '__pycache__' \
   "$SRC_SCRIPTS/" "$REPO/scripts/" 2>/dev/null || cp -R "$SRC_SCRIPTS/." "$REPO/scripts/"
 
 # ---------------------------------------------------------------- 3. 模板

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+"""ROLE: Bill PDF 入口（选文件 + 调引擎）
+ENTRY: python3 pick_and_render.py '{"file":"","date":"","engine":"docx"}'
+CALLED-BY: workflow007 的「生成Bill PDF」节点
+DEPS: bill_docx.py
+
 核对后生成 Bill：
   1) 定位计算表（指定文件名，或 output 目录里最新）
   2) 生成 PDF（docx 模板 / 程序绘制两种引擎）

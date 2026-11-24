@@ -1,0 +1,262 @@
+{
+ "updatedAt": "2026-11-24T03:14:07.699Z",
+ "createdAt": "2026-11-20T01:10:42.305Z",
+ "id": "eb3fb6d6-0e78-43f6-aeaf-ef9cc6bf4ad4",
+ "name": "workflow007 · 核对后生成Bill PDF",
+ "description": null,
+ "active": false,
+ "isArchived": false,
+ "nodes": [
+  {
+   "parameters": {
+    "formTitle": "生成 Bill PDF（核对后）",
+    "formDescription": "### 用途\n先在计算表里核对并矫正数据，再提交这里生成客户 PDF。\n\n- 文件名留空 = 自动取 output 目录里最新的 60103计算表_*.xlsx\n- 账单日期留空 = 用今天",
+    "formFields": {
+     "values": [
+      {
+       "fieldLabel": "计算表文件名",
+       "placeholder": "例：60103计算表_20261119180332.xlsx（留空=最新）"
+      },
+      {
+       "fieldLabel": "账单日期",
+       "placeholder": "例：2026. 11. 19（留空=今天）"
+      },
+      {
+       "fieldLabel": "备注",
+       "placeholder": "选填"
+      },
+      {
+       "fieldLabel": "Last Balance",
+       "placeholder": "上期余额，如 84.44（留空 = 0）"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.formTrigger",
+   "typeVersion": 2.2,
+   "position": [
+    -464,
+    0
+   ],
+   "id": "b50ffb51-c2d1-4c2f-bed1-2a497be81017",
+   "name": "On form submission",
+   "webhookId": "928b6ac2-c574-4bb7-85c2-4aeb5da80d17"
+  },
+  {
+   "parameters": {
+    "jsCode": "// 表单 → 脚本参数（文件名留空 = 用 output 里最新的计算表）\nconst f = $input.first().json || {};\nconst lbRaw = String(f['Last Balance'] ?? '').trim();\nconst lb = lbRaw === '' ? 0 : Number(lbRaw.replace(/[^0-9.\\-]/g, '')) || 0;\nreturn [{ json: {\n  file: String(f['计算表文件名'] || '').trim(),\n  date: String(f['账单日期'] || '').trim(),\n  note: String(f['备注'] || '').trim(),\n  last_balance: lb,\n  dir: '/data/data/workflow005/output',\n  engine: 'docx',\n} }];"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -224,
+    0
+   ],
+   "id": "ef2295e7-3d37-46f2-8925-566c2ca5e236",
+   "name": "解析表单"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://python-runner:8000/run",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ script: 'workflow005/scripts/pick_and_render.py', args: [JSON.stringify({ file: $json.file, date: $json.date, last_balance: $json.last_balance, dir: $json.dir, engine: $json.engine })], timeout: 900 }) }}",
+    "options": {
+     "timeout": 920000
+    }
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    32,
+    0
+   ],
+   "id": "44b55d88-e22f-46c9-bef3-973354d4cfe6",
+   "name": "生成Bill PDF"
+  },
+  {
+   "parameters": {
+    "jsCode": "const r = $json;\nconst out = (r.stdout || '').trim();\nconst err = (r.stderr || '').trim();\nif (r.code !== 0) throw new Error('生成 PDF 失败：' + err.split('\\n').slice(-6).join(' | '));\nconst line = out.split('\\n').filter(l => l.trim().startsWith('{')).pop() || '{}';\nreturn [{ json: JSON.parse(line) }];"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    272,
+    0
+   ],
+   "id": "029feb60-4e3a-4004-99aa-831147fbb40a",
+   "name": "解析结果"
+  },
+  {
+   "parameters": {
+    "jsCode": "const r = $json;\nconst AT = 'ou_06d848a891ff38012cf3e3ba20de7370';\nconst card = {\n  config: { wide_screen_mode: true },\n  header: { template: 'green', title: { tag: 'plain_text', content: '✅ Bill PDF 已生成' } },\n  elements: [\n    { tag: 'div', text: { tag: 'lark_md', content:\n      `**来源计算表**\\n\\`${r.xlsx}\\`\\n**PDF**\\n\\`${r.out}\\`\\n**订单** ${r.orders} 单\\n**合计** US$${r.subtotal}\\n**payment fee(0.5%)** US$${r.fee}\\n**Last Balance** US$${r.last_balance ?? 0}\\n**最终合计** US$${r.total}` } },\n    { tag: 'hr' },\n    { tag: 'div', text: { tag: 'lark_md', content: `<at id=\"${AT}\"></at>` } },\n  ],\n};\nreturn [{ json: { card } }];"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    512,
+    0
+   ],
+   "id": "a759bd55-213a-4d5a-8672-773733ec6648",
+   "name": "通知卡片"
+  },
+  {
+   "parameters": {
+    "resource": "message",
+    "operation": "send",
+    "receive_id_type": "chat_id",
+    "receive_id": {
+     "__rl": true,
+     "mode": "id",
+     "value": "oc_76b442ae3f9e004ad15fc88783e24bba"
+    },
+    "msg_type": "interactive",
+    "content": "={{ JSON.stringify($json.card) }}",
+    "options": {}
+   },
+   "type": "n8n-nodes-feishu-lark.lark",
+   "typeVersion": 1,
+   "position": [
+    752,
+    0
+   ],
+   "id": "548a0864-b199-4933-81a7-b02ca49fe7c2",
+   "name": "发送飞书",
+   "webhookId": "cfc0a2a2-ce4a-408d-aaff-d75b5d2d8bd9",
+   "credentials": {
+    "larkApi": {
+     "id": "tEcMLjsz3qTBqnWO",
+     "name": "Lark Tenant Token account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://python-runner:8000/run",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ script: 'workflow005/scripts/feishu_send_file.py', args: ['--path', $json.out], timeout: 300 }) }}",
+    "options": {
+     "timeout": 320000
+    }
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    492,
+    160
+   ],
+   "id": "a89fb37d-3cd9-48b4-a5b4-9b6f004670a5",
+   "name": "发送PDF文件"
+  }
+ ],
+ "connections": {
+  "On form submission": {
+   "main": [
+    [
+     {
+      "node": "解析表单",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "解析表单": {
+   "main": [
+    [
+     {
+      "node": "生成Bill PDF",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "生成Bill PDF": {
+   "main": [
+    [
+     {
+      "node": "解析结果",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "解析结果": {
+   "main": [
+    [
+     {
+      "node": "发送PDF文件",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "通知卡片": {
+   "main": [
+    [
+     {
+      "node": "发送飞书",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "发送PDF文件": {
+   "main": [
+    [
+     {
+      "node": "通知卡片",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "binaryMode": "separate"
+ },
+ "staticData": null,
+ "meta": null,
+ "nodeGroups": [],
+ "pinData": {},
+ "versionId": "4687522f-49b2-49e3-a913-aa6d9f5876ce",
+ "activeVersionId": "4687522f-49b2-49e3-a913-aa6d9f5876ce",
+ "versionCounter": 7,
+ "triggerCount": 1,
+ "sourceWorkflowId": null,
+ "tags": [],
+ "shared": [
+  {
+   "updatedAt": "2026-11-20T01:10:42.311Z",
+   "createdAt": "2026-11-20T01:10:42.311Z",
+   "role": "workflow:owner",
+   "workflowId": "eb3fb6d6-0e78-43f6-aeaf-ef9cc6bf4ad4",
+   "projectId": "X1Hl08KPV0Zp1tHQ",
+   "project": {
+    "updatedAt": "2026-10-26T02:02:16.400Z",
+    "createdAt": "2026-10-26T01:45:51.871Z",
+    "id": "X1Hl08KPV0Zp1tHQ",
+    "name": "Feng Ming <mingfeng1026@proton.me>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "21992e0f-eaf9-4b0b-9538-ca2c3d839d39"
+   }
+  }
+ ],
+ "versionMetadata": {
+  "name": "workflow007 · 核对后生成Bill PDF",
+  "description": null
+ }
+}

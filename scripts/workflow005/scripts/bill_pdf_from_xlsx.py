@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+"""ROLE: 计算表 → 逐单数据（PDF 取数层）
+ENTRY: 被 import：load(xlsx) -> [{txn,qty,amount,imgs,...}]
+CALLED-BY: bill_docx.py
+DEPS: bill_pdf.py（常量）
+
 用「已核对/已矫正」的计算表 xlsx 生成 Bill PDF。
 
 流程：
@@ -113,7 +117,11 @@ def load(path):
         code = B.COUNTRY_CODE.get(name, "")
         country_text = B.COUNTRY_TEXT.get(name) or code or name
 
-        qty = sum(int(num(ws.cell(r, 8).value) or 0) for r in rs)
+        # 数量不含 SHIP-PROTECT（运费保障行）；整单只有 SHIP 时退回全部行
+        def _is_ship(row):
+            return str(ws.cell(row, 10).value or "").upper().startswith("SHIP")
+        qty_rows = [r for r in rs if not _is_ship(r)] or rs
+        qty = sum(int(num(ws.cell(r, 8).value) or 0) for r in qty_rows)
         uhf = num(ws.cell(first, 22).value) or 0.0     # V 欧盟税（美元）
 
         total_usd = 0.0

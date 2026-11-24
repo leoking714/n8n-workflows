@@ -1,5 +1,10 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+"""ROLE: 路径解析（容器 /scripts 只读、/data 可写）
+ENTRY: 被 import
+CALLED-BY: write_from_template.py、write_orders_xlsx.py
+DEPS: 无
+
 路径解析：代码在 /scripts（只读），数据/输出要写 /data（可写）。
 
 本地开发时（代码目录本身可写）自动用 工程目录/data 和 工程目录/输出；

@@ -1,5 +1,10 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+"""ROLE: 订单明细导出 Excel
+ENTRY: python3 write_orders_xlsx.py --in <json> --out <xlsx>
+CALLED-BY: workflow005 的「生成订单Excel」节点
+DEPS: paths.py
+
 把 n8n 解析好的订单明细写成带格式的 Excel（供人工查看/对账）。
 
 用法：

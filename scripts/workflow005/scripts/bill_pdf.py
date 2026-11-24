@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+"""ROLE: 国家码/文案常量 + 旧 reportlab 引擎
+ENTRY: 被 import（只取常量：COUNTRY_CODE / COUNTRY_TEXT）
+CALLED-BY: bill_docx.py、bill_pdf_from_xlsx.py（不要用它直接出 PDF，已由 bill_docx 取代）
+DEPS: 无
+
 按客户 2026-11 的 Bill PDF 样式生成英文账单（A4 竖版）。
 
 版式（从客户 PDF 反解）：

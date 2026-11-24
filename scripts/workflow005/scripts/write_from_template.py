@@ -1,5 +1,10 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+"""ROLE: 计算表生成（模板套用）
+ENTRY: python3 write_from_template.py --detail <json> --out <xlsx>
+CALLED-BY: workflow005 抓包版 / API 版的「生成计算表」节点
+DEPS: paths.py（路径）, check_calc_format.py（写后自检）
+
 把 n8n 算好的明细写成「计算表」（套模板，保留样式/合并/商品图/公式）。
 
 与 generate.py 的区别：这里不重新算钱，只负责排版。
@@ -147,6 +152,26 @@ def insert_images(ws, records, col="G"):
 # ============================================================================
 # 底色
 # ============================================================================
+
+
+
+def fix_row_styles(path, row_nums, style_index=1):
+    """保存后把指定行号的 row 元素样式改成 style_index（openpyxl 行样式无 setter）"""
+    import zipfile, shutil, re as _re
+    tmp = path + ".tmp"
+    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if _re.match(r"xl/worksheets/sheet\d+\.xml$", item.filename):
+                txt = data.decode("utf-8")
+                for rn in row_nums:
+                    pat = _re.compile(r'(<row r="%d"(?:(?!>).)*?)s="\d+"' % rn)
+                    txt = pat.sub(lambda m: m.group(1) + 's="%d"' % style_index, txt, count=1)
+                data = txt.encode("utf-8")
+            zout.writestr(item, data)
+    shutil.move(tmp, path)
+
+
 def cat_of(h):
     if h.get("缺运价") or h.get("缺配置"):
         return "blocked"
@@ -333,8 +358,29 @@ def write_detail(ws, detail, fx, params=None):
     ws[f"AE{fee_row}"] = 0.005
     ws[f"AF{fee_row}"] = f"=SUM(AF{t}:AF{row})*0.005"
 
-    final_row = fee_row + 1
-    ws[f"AF{final_row}"] = f"=SUM(AF{t}:AF{fee_row})"
+    # 账务两行：本次挂起（减项）/ 历史挂账（加项），都来自 params（0 则不写）
+    try:
+        prev_balance = float((params or {}).get("PREV_BALANCE") or 0)   # 历史挂账
+        suspend_amt = float((params or {}).get("SUSPEND_AMOUNT") or 0)  # 本次挂起
+    except Exception:
+        prev_balance, suspend_amt = 0.0, 0.0
+
+    row = fee_row
+    if suspend_amt:
+        row += 1
+        ws[f"AE{row}"] = "本次挂起（待下期收取）"
+        ws[f"AF{row}"] = -round(suspend_amt, 2)
+    if prev_balance:
+        row += 1
+        ws[f"AE{row}"] = "历史挂账（本期收取）Previous Balance Due"
+        ws[f"AF{row}"] = round(prev_balance, 2)
+
+    final_row = row + 1
+    if row > fee_row:
+        ws[f"AE{final_row}"] = "balance"
+        ws[f"AF{final_row}"] = f"=SUM(AF{t}:AF{row})"
+    else:
+        ws[f"AF{final_row}"] = f"=SUM(AF{t}:AF{fee_row})"
 
     # 颜色图例（与客户计算表完全一致的文案与配色）
     ws[f"B{final_row}"] = "颜色图例："
@@ -357,11 +403,18 @@ def write_detail(ws, detail, fx, params=None):
         if color:
             ws[f"A{rr}"].fill = PatternFill("solid", fgColor=color)
 
+    # 合计块/图例行的行样式与行高：对齐模板第 308 行之后（s=1 无底色、自动高度，图例 18pt）
+    for rr in range(t, final_row + 1):
+        ws.row_dimensions[rr].height = None
+    for i in range(1, len(legend) + 1):
+        ws.row_dimensions[final_row + i].height = 18
+
+
     try:
         eu_tax = float((params or {}).get("EU_TAX_BASE") or (params or {}).get("EU_TAX") or 3.33)
     except Exception:
         eu_tax = 5.6
-    return r, ok, fail
+    return r, ok, fail, list(range(t, final_row + len(legend) + 1))
 
 
 # ============================================================================
@@ -551,7 +604,7 @@ def main():
     wb = openpyxl.load_workbook(args.out)
     ws = wb.worksheets[0]
 
-    r, ok_img, fail_img = write_detail(ws, detail, fx, params)
+    r, ok_img, fail_img, totals_rows = write_detail(ws, detail, fx, params)
 
 
     # 打印 / PDF 设置：竖版 A4（对齐客户 2026-11-6~11-13 的 PDF 样本）、一页宽、重复表头
@@ -567,11 +620,36 @@ def main():
 
 
     wb.save(args.out)
+    # 合计块/图例行改用模板的行样式（s=1，无淡色底纹）
+    try:
+        if 't' in dir() and 'final_row' in dir():
+            pass
+    except Exception:
+        pass
+    try:
+        if totals_rows:
+            # 明细行统一 s=2（超过模板 306 行时新增行没有行级样式）
+            fix_row_styles(args.out, list(range(2, totals_rows[0])), 2)
+            fix_row_styles(args.out, totals_rows, 1)
+    except Exception as e:
+        print("行样式修正失败:", e, file=sys.stderr)
     keep_wps_images(tpl, args.out)
 
     pdf_path = None
     if args.pdf:
         pdf_path = to_pdf(args.out)
+
+    # 写表后格式自检（发现问题只告警，不阻断出表）
+    try:
+        import subprocess as _sp
+        _chk = _sp.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "check_calc_format.py"), args.out],
+                       capture_output=True, text=True, timeout=120)
+        if _chk.returncode != 0:
+            print("格式自检未通过:\n" + (_chk.stdout or "").strip()[-600:], file=sys.stderr)
+        else:
+            print("格式自检: 通过", file=sys.stderr)
+    except Exception as e:
+        print("格式自检跳过:", e, file=sys.stderr)
 
     print(f"商品图：成功 {ok_img} 张，失败 {fail_img} 张")
     print("RESULT " + json.dumps({

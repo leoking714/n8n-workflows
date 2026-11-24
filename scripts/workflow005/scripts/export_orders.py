@@ -1,5 +1,9 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+"""ROLE: 订单明细 JSON / XLSX 写出工具
+ENTRY: 被 import（write_xlsx）
+CALLED-BY: write_orders_xlsx.py
+DEPS: 无
 从 ERP 导出一段时间的订单到 JSON / XLSX（用于对账、比对、离线复算）。
 
 用法：

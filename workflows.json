@@ -9,11 +9,19 @@
  },
  {
   "id": "NjNTrPqe5p06Kd7W",
-  "name": "airtable写入-workflow001",
+  "name": "airtable写入采购价和运费-workflow001",
   "active": true,
   "nodes": 27,
-  "file": "airtable写入-workflow001-NjNTrPqe.json",
+  "file": "airtable写入采购价和运费-workflow001-NjNTrPqe.json",
   "redacted": 2
+ },
+ {
+  "id": "1vtebK94gIzTNecr",
+  "name": "workflow005 · v7版（抓包）",
+  "active": true,
+  "nodes": 54,
+  "file": "workflow005-v7版-抓包-1vtebK94.json",
+  "redacted": 0
  },
  {
   "id": "K2fxcraFzqzFIK5r",
@@ -53,6 +61,22 @@
   "active": true,
   "nodes": 2,
   "file": "飞书长链接测试-p6xIfVmN.json",
+  "redacted": 0
+ },
+ {
+  "id": "c7cb10db-42ab-4148-99a8-448c040bd0a7",
+  "name": "workflow005 · v7版（新表/运价按重量段）",
+  "active": false,
+  "nodes": 44,
+  "file": "workflow005-v7版-新表-运价按重量段-c7cb10db.json",
+  "redacted": 0
+ },
+ {
+  "id": "eb3fb6d6-0e78-43f6-aeaf-ef9cc6bf4ad4",
+  "name": "workflow007 · 核对后生成Bill PDF",
+  "active": false,
+  "nodes": 7,
+  "file": "workflow007-核对后生成Bill-PDF-eb3fb6d6.json",
   "redacted": 0
  }
 ]

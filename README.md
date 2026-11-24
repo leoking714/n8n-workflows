@@ -1,6 +1,6 @@
 # 文件备份
 
-最后备份：2026-11-21 14:33:19
+最后备份：2026-11-24 11:20:57
 
 ## 目录
 
@@ -17,12 +17,15 @@
 | 名称 | 节点数 | 文件 |
 |---|---|---|
 | R1 | 21 | `workflows/R1-RnDESn3R.json` |
-| airtable写入-workflow001 | 27 | `workflows/airtable写入-workflow001-NjNTrPqe.json` |
+| airtable写入采购价和运费-workflow001 | 27 | `workflows/airtable写入采购价和运费-workflow001-NjNTrPqe.json` |
+| workflow005 · v7版（抓包） | 54 | `workflows/workflow005-v7版-抓包-1vtebK94.json` |
 | 插件更新马帮cookie | 3 | `workflows/插件更新马帮cookie-K2fxcraF.json` |
 | 更新马帮cookie | 3 | `workflows/更新马帮cookie-rUWp1Guv.json` |
 | 模板｜全局错误捕获 | 10 | `workflows/模板-全局错误捕获-HREvfdug.json` |
 | 生成60103客户对账单 | 28 | `workflows/生成60103客户对账单-25miDNyx.json` |
 | 飞书长链接测试 | 2 | `workflows/飞书长链接测试-p6xIfVmN.json` |
+| workflow005 · v7版（新表/运价按重量段） | 44 | `workflows/workflow005-v7版-新表-运价按重量段-c7cb10db.json` |
+| workflow007 · 核对后生成Bill PDF | 7 | `workflows/workflow007-核对后生成Bill-PDF-eb3fb6d6.json` |
 
 ## 恢复
 
